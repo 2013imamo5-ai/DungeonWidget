@@ -34,10 +34,12 @@ object DungeonScene {
             rect(x-4f,9f,8f,15f,Color.rgb(255,202,81))
             rect(x-2f,15f,4f,8f,Color.rgb(255,244,170))
         }
-        val bob=if(frame%2==0) 0f else 3f
+        val phase=frame%96
+        val moving=phase<65 && !h.paused
+        val bob=if(moving && frame%8<4) 0f else 2f
         // Knight: chunky hand-painted pixel blocks
-        val x=68f+((h.room-1)*18f)+((frame%4)*2)
-        val y=86f+bob
+        val x=if(h.paused) 88f else 42f+(phase.coerceAtMost(65)*2.55f)
+        val y=79f+bob
         rect(x-16,y+37,14f,15f,Color.rgb(56,61,76))
         rect(x+4,y+37,14f,15f,Color.rgb(56,61,76))
         rect(x-20,y+2,40f,40f,Color.rgb(108,124,143))
@@ -50,8 +52,13 @@ object DungeonScene {
         rect(x+17,y+31,15f,4f,Color.rgb(214,157,70))
         rect(x-29,y+11,15f,27f,Color.rgb(115,82,58))
         rect(x-25,y+16,7f,12f,Color.rgb(182,150,99))
+        // Walking feet
+        if(moving) {
+            rect(x-13,y+46,12f,5f,Color.rgb(48,49,57))
+            rect(x+3,y+46+(if(frame%8<4) 3f else -3f),12f,5f,Color.rgb(48,49,57))
+        }
         // Skeleton
-        val ex=225f+if(h.event=="boss") -12f else 0f
+        val ex=225f+(if(h.event=="boss") -12f else 0f)+(if(frame%18<9) 0f else 2f)
         rect(ex-15,89f,30f,26f,if(h.event=="boss") Color.rgb(137,64,78) else if(h.floor%10>5) Color.rgb(108,175,190) else Color.rgb(194,188,168))
         rect(ex-17,75f,34f,27f,Color.rgb(214,211,192))
         rect(ex-11,87f,7f,7f,Color.rgb(33,28,31))
@@ -60,6 +67,12 @@ object DungeonScene {
         rect(ex-12,111f,8f,25f,Color.rgb(176,167,146))
         rect(ex+4,111f,8f,25f,Color.rgb(176,167,146))
         rect(ex-20,105f,40f,5f,Color.rgb(153,148,139))
+        // Sword strike near enemy at end of each patrol
+        if(!h.paused && phase in 67..82) {
+            val strike=if(phase%4<2) Color.rgb(252,226,137) else Color.rgb(235,235,245)
+            rect(x+20,y-7,29f,4f,strike)
+            rect(x+41,y-13,5f,17f,strike)
+        }
         // Chest
         rect(264f,125f,32f,23f,Color.rgb(94,54,32))
         rect(264f,123f,32f,9f,Color.rgb(161,105,48))
