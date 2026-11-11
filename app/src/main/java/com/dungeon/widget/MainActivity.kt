@@ -26,8 +26,9 @@ class MainActivity:Activity() {
  private lateinit var campButton:Button
  private lateinit var potionButton:Button
  private var frame=0
+ private var lastStateRefresh=0L
  private val loop=object:Runnable {
-  override fun run(){if(!isFinishing){redraw();handler.postDelayed(this,1500)}}
+  override fun run(){if(!isFinishing){redraw();handler.postDelayed(this,120)}}
  }
  private fun label(text:String,size:Float=16f):TextView=TextView(this).apply {
   this.text=text;textSize=size;setTextColor(Color.rgb(228,231,222))
@@ -74,7 +75,8 @@ class MainActivity:Activity() {
  override fun onResume(){super.onResume();handler.removeCallbacks(loop);handler.post(loop)}
  override fun onPause(){handler.removeCallbacks(loop);super.onPause()}
  private fun redraw(){
-  val h=DungeonGame.advance(this)
+  val now=System.currentTimeMillis()
+  val h=if(now-lastStateRefresh>=1500L){lastStateRefresh=now;DungeonGame.advance(this)} else DungeonGame.load(this)
   title.text="⚔ ${h.biome} · Этаж ${h.floor} · ${h.room}/8"
   stats.text="❤ ${h.hp}/${h.maxHp}    ★ ${h.level}    🪙 ${h.gold}\n${h.log}"
   loot.text="⚔ ${h.weaponName} +${h.weapon}\n🛡 ${h.armorName} +${h.armor}   🧪 ${h.potions}"
@@ -83,6 +85,6 @@ class MainActivity:Activity() {
   campButton.text="⛺ Улучшить лагерь (+6 HP) · ${80+h.camp*70} золота"
   potionButton.text="🧪 Купить зелье · ${25+h.floor*2} золота"
   scene.setImageBitmap(DungeonScene.render(h,frame++))
-  DungeonWidgetProvider.refreshAll(this)
+  if(now-lastStateRefresh<130L) DungeonWidgetProvider.refreshAll(this)
  }
 }
