@@ -58,9 +58,14 @@ class MainActivity:Activity() {
             setOnClickListener { DungeonGame.toggle(this@MainActivity);redraw() }
         }
         root.addView(pause)
+        root.addView(Button(this).apply {
+            text="⬇ Проверить обновления"
+            setOnClickListener { UpdateChecker.check(this@MainActivity,true) }
+        })
         root.addView(label("Подземелье исследуется само. Прогресс сохраняется.\nДобавь Dungeon Widget через меню виджетов главного экрана.",13f))
         setContentView(root)
         redraw()
+        UpdateChecker.check(this)
     }
     override fun onResume() {super.onResume();handler.removeCallbacks(loop);handler.post(loop)}
     override fun onPause() {handler.removeCallbacks(loop);super.onPause()}
