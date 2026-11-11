@@ -1,4 +1,4 @@
-name: Build APK Release
+name: Build signed APK Release
 on:
   push:
     branches: [main]
@@ -18,13 +18,29 @@ jobs:
         run: |
           echo "ANDROID_HOME=$ANDROID_SDK_ROOT" >> "$GITHUB_ENV"
           yes | sdkmanager --licenses >/dev/null || true
-      - name: Build APK
+      - name: Verify permanent signing secrets
+        env:
+          KEYSTORE_B64: ${{ secrets.SIGNING_KEYSTORE_BASE64 }}
+          STORE_PASSWORD: ${{ secrets.SIGNING_STORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.SIGNING_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.SIGNING_KEY_PASSWORD }}
         run: |
-          gradle --no-daemon :app:assembleDebug
-          cp app/build/outputs/apk/debug/app-debug.apk DungeonWidget-v0.1.0.apk
+          test -n "$KEYSTORE_B64" || { echo "::error::Set SIGNING_KEYSTORE_BASE64 in repository secrets"; exit 1; }
+          test -n "$STORE_PASSWORD" || { echo "::error::Set SIGNING_STORE_PASSWORD"; exit 1; }
+          test -n "$KEY_ALIAS" || { echo "::error::Set SIGNING_KEY_ALIAS"; exit 1; }
+          test -n "$KEY_PASSWORD" || { echo "::error::Set SIGNING_KEY_PASSWORD"; exit 1; }
+          printf '%s' "$KEYSTORE_B64" | base64 --decode > "$RUNNER_TEMP/dungeon-release.jks"
+          echo "SIGNING_KEYSTORE_PATH=$RUNNER_TEMP/dungeon-release.jks" >> "$GITHUB_ENV"
+          echo "SIGNING_STORE_PASSWORD=$STORE_PASSWORD" >> "$GITHUB_ENV"
+          echo "SIGNING_KEY_ALIAS=$KEY_ALIAS" >> "$GITHUB_ENV"
+          echo "SIGNING_KEY_PASSWORD=$KEY_PASSWORD" >> "$GITHUB_ENV"
+      - name: Build permanently signed APK
+        run: |
+          gradle --no-daemon :app:assembleRelease
+          cp app/build/outputs/apk/release/app-release.apk DungeonWidget-v0.2.0.apk
       - name: Publish direct APK
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release view v0.1.0 >/dev/null 2>&1 && gh release delete v0.1.0 --yes || true
-          gh release create v0.1.0 DungeonWidget-v0.1.0.apk --title "Dungeon Widget v0.1.0" --notes "First playable auto-dungeon widget. Debug-signed APK for testing."
+          gh release view v0.2.0 >/dev/null 2>&1 && gh release delete v0.2.0 --yes || true
+          gh release create v0.2.0 DungeonWidget-v0.2.0.apk --title "Dungeon Widget v0.2.0" --notes "Permanent APK signing and in-app update checking. If you installed the original v0.1.0 debug build, uninstall it once before installing v0.2.0."
