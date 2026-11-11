@@ -10,6 +10,7 @@ import android.graphics.Bitmap
 import android.graphics.Color
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
+import android.graphics.drawable.BitmapDrawable
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
@@ -32,6 +33,7 @@ class MainActivity:Activity(){
     private lateinit var body:LinearLayout
     private lateinit var details:ScrollView
     private var page=0
+    private var sortMode=0
     private var frame=0
     private var lastUpdate=0L
     private var lastWidgetRefresh=0L
@@ -108,7 +110,7 @@ class MainActivity:Activity(){
                 if(page==0||now-lastPageRefresh>=9000L)refreshPage()
             }
             if(page==0){
-                scene.setImageBitmap(DungeonScene.render(state,frame++,true))
+                scene.setImageDrawable(BitmapDrawable(resources,DungeonScene.render(state,frame++,true)).apply{isFilterBitmap=false})
             }
             if(now-lastWidgetRefresh>=12000L){
                 DungeonWidgetProvider.refreshAll(this@MainActivity)
@@ -172,7 +174,8 @@ class MainActivity:Activity(){
         val hearts=if(state.hp*100/maxOf(1,state.maxHp)<30)"🩸" else "♥"
         vitality.text=hearts+" "+state.hp+"/"+state.maxHp+"    ✦ "+state.level+"    ◈ "+state.gems+"    ◉ "+state.gold
         narration.text=state.log+"\nКОМНАТА "+state.room+"/8  ·  "+state.className+
-            (if(state.paused)"  ·  ПАУЗА" else "")
+            (if(state.paused)"  ·  ПАУЗА" else "")+
+            (if(state.effectTicks>0)"  ·  "+state.status else "")
     }
     private fun buildTabs(){
         tabs.removeAllViews()
@@ -243,7 +246,17 @@ class MainActivity:Activity(){
         if(state.gear.isEmpty()){
             card(body,"ПОКА ПУСТО","Продолжай исследовать подземелье: предметы выпадают из врагов и сундуков.")
         }
-        state.gear.sortedWith(compareByDescending<Gear>{it.rarity}.thenByDescending{it.power}).forEach{item->
+        val sorts=row(body)
+        mini(sorts,if(sortMode==0)"✓ РЕДКОСТЬ" else "РЕДКОСТЬ"){sortMode=0;refreshPage()}
+        mini(sorts,if(sortMode==1)"✓ СИЛА" else "СИЛА"){sortMode=1;refreshPage()}
+        mini(sorts,if(sortMode==2)"✓ ТИП" else "ТИП"){sortMode=2;refreshPage()}
+        gap(body,9)
+        val gearSorted=when(sortMode){
+            1->state.gear.sortedByDescending{it.power}
+            2->state.gear.sortedWith(compareBy<Gear>{it.slot}.thenByDescending{it.rarity})
+            else->state.gear.sortedWith(compareByDescending<Gear>{it.rarity}.thenByDescending{it.power})
+        }
+        gearSorted.forEach{item->
             val equipped=state.equipment[item.slot]==item.id
             val star=when(item.rarity){4->"★★★★★";3->"★★★★";2->"★★★";1->"★★";else->"★"}
             val slot=when(item.slot){"weapon"->"⚔ Оружие";"armor"->"⛨ Броня";"ring"->"◈ Кольцо";else->"✧ Амулет"}
@@ -282,13 +295,21 @@ class MainActivity:Activity(){
                 state.shards>=5+state.forge*2&&state.gold>=30+state.forge*12){
                 change{DungeonGame.forgeItem(this@MainActivity)}
             }
+            action(this,"УСИЛИТЬ НАДЕТОЕ ОРУЖИЕ · "+(20+state.level*3)+" ЗОЛОТА · "+(4+state.forge)+" МАТЕРИАЛОВ",
+                state.weaponItem!=null&&state.gold>=20+state.level*3&&state.shards>=4+state.forge){
+                change{DungeonGame.improveWeapon(this@MainActivity)}
+            }
         }
         card(body,"✥ СТРАНСТВУЮЩИЙ ТОРГОВЕЦ",
-            "Ассортимент обновляется случайно при покупке"){
+            "Предложения обновляются каждый день. Доступно три товара и лечебные зелья."){
             action(this,"КУПИТЬ ЗЕЛЬЕ · "+(25+state.floor*2)+" МОНЕТ",
                 state.gold>=25+state.floor*2){change{DungeonGame.buyPotion(this@MainActivity)}}
-            action(this,"СЛУЧАЙНОЕ СНАРЯЖЕНИЕ · "+(70+state.floor*3)+" МОНЕТ",
-                state.gold>=70+state.floor*3){change{DungeonGame.buyFromMerchant(this@MainActivity)}}
+            for(idx in 0..2){
+                val item=DungeonGame.merchantOffer(state,idx)
+                val price=70+state.floor*3+idx*25
+                action(this,item.name+" · +"+item.power+" · "+price+" ЗОЛОТА",
+                    state.gold>=price){change{DungeonGame.buyOffer(this@MainActivity,idx)}}
+            }
         }
     }
     private fun hero(){

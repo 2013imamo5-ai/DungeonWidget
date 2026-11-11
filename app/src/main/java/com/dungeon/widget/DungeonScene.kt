@@ -46,10 +46,11 @@ object DungeonScene {
         block(c,0f,0f,320f,17f,0xFF0A1119.toInt())
         txt(c,"F"+h.floor+"  "+h.biome.uppercase().take(20),9f,12f,10f,accent)
         txt(c,"R"+h.room+"/8",273f,12f,10f,0xFFE1DCC9.toInt())
-        val roomSeed=(h.floor*71+h.room*29)
+        val layout=DungeonMap.get(h.floor,h.room)
+        val roomSeed=layout.seed
         for(y in 0 until 11)for(x in 0 until 20){
             val xx=x*16f;val yy=y*16f+17
-            val open=cellOpen(x,y)
+            val open=layout.isFloor(x,y)
             val noise=(x*37+y*79+roomSeed)%11
             if(open){
                 block(c,xx,yy,16f,16f,if(noise>6)bright(floorColor,9)else floorColor)
@@ -104,33 +105,48 @@ object DungeonScene {
         block(c,109f,57f,21f,15f,if(biome==2)0xFFC47A5A.toInt() else 0xFF866A83.toInt())
         block(c,39f,57f,10f,16f,0xFF514A4D.toInt())
         block(c,40f,53f,8f,5f,0xFF8E8679.toInt())
+        // A hidden side-chamber appears in some rooms.
+        layout.secret?.let{secret->
+            val sx=secret.x*16f+5f;val sy=secret.y*16f+19f
+            block(c,sx,sy,8f,7f,0xFF9C7F45.toInt())
+            dot(c,sx+2f,sy+2f,0xFFF5D58A.toInt())
+        }
         // A map of eight chambers.
         block(c,226f,19f,86f,25f,0xD00B121C.toInt())
         for(i in 0 until 8)block(c,234f+i*9f,26f,6f,8f,
             if(i<h.room-1)0xFF6EB38C.toInt() else if(i==h.room-1)accent else 0xFF3C4655.toInt())
         // Ground shadow of interactive object.
-        val targetX=221f;val targetY=103f
+        val secretIndex=layout.secret?.let{layout.path.indexOf(it)}?:-1
+        val encounter=if(h.roomKind=="secret"&&secretIndex>0)secretIndex
+            else (layout.path.size*2/3).coerceAtLeast(8).coerceAtMost(layout.path.size-2)
+        val target=layout.path[encounter]
+        val targetX=target.x*16f+8f
+        val targetY=17f+target.y*16f+5f
         block(c,targetX-15,targetY+29,33f,4f,0x8A0B0E14.toInt())
         when(h.roomKind){
             "boss","battle"->enemy(c,targetX,targetY,h,frame,accent)
             "chest"->chest(c,targetX,targetY,frame)
             "shrine"->shrine(c,targetX,targetY,frame)
             "potion"->potion(c,targetX,targetY,frame)
-            "relic"->shrine(c,targetX,targetY,frame)
+            "relic","secret"->shrine(c,targetX,targetY,frame)
             "merchant"->merchant(c,targetX,targetY,frame)
             "trap"->trap(c,targetX,targetY)
             else->enemy(c,targetX,targetY,h,frame,accent)
         }
-        // The hero follows an actual corridor, then turns towards the exit.
+        if(h.roomKind=="boss"&&h.pathStep in (encounter-5)..(encounter-1)){
+            txt(c,"!",targetX-3f,targetY-48f,15f,0xFFFF7F72.toInt())
+            block(c,targetX-16f,targetY+32f,32f,3f,0xFFC44E44.toInt())
+        }
+        // The hero moves along a BFS-computed route, including turns and detours.
         val ratio=if(live&&!h.paused) ((System.currentTimeMillis()-h.lastTick).coerceIn(0,DungeonGame.stepMillis()).toFloat()/DungeonGame.stepMillis()) else 0f
-        val step=h.pathStep.toFloat()+ratio
-        val tx=if(step<15f)2f+step else 17f
-        val ty=if(step<15f)5f else 5f+(step-15f).coerceAtMost(3f)
-        val px=tx*16f+8f
-        val py=17f+ty*16f+5f
+        val index=h.pathStep.coerceIn(0,layout.path.lastIndex)
+        val current=layout.path[index]
+        val next=layout.path[(index+1).coerceAtMost(layout.path.lastIndex)]
+        val px=(current.x+(next.x-current.x)*ratio)*16f+8f
+        val py=17f+(current.y+(next.y-current.y)*ratio)*16f+5f
         val walking=live&&!h.paused && h.recovery==0
         hero(c,px,py,walking,frame,h.heroClass,accent,h.event=="camp")
-        if(walking&&h.pathStep in 10..13&&h.roomKind in listOf("battle","boss")){
+        if(walking&&h.pathStep in (encounter-2)..(encounter+1)&&h.roomKind in listOf("battle","boss")){
             val blade=if(frame%4<2)0xFFFBE1AC.toInt() else 0xFFE8F8FF.toInt()
             block(c,px+11f,py-17f,17f,3f,blade)
             block(c,px+26f,py-20f,3f,12f,blade)
@@ -181,6 +197,39 @@ object DungeonScene {
     }
     private fun enemy(c:Canvas,x:Float,y:Float,h:HeroState,frame:Int,accent:Int){
         val boss=h.roomKind=="boss"
+        val species=h.enemy.lowercase()
+        if(!boss&&("паук" in species||"волк" in species||"крыса" in species)){
+            val beast=if("паук" in species)0xFF8F667F.toInt() else 0xFFA49A8F.toInt()
+            block(c,x-16f,y-12f,32f,18f,beast)
+            block(c,x-19f,y-17f,20f,12f,bright(beast,19))
+            for(i in 0..3)block(c,x-13f+i*9f,y+5f,5f,13f,beast)
+            dot(c,x-11f,y-13f,0xFFEE7373.toInt(),4f)
+            dot(c,x-3f,y-13f,0xFFEE7373.toInt(),4f)
+            if("паук" in species)for(i in 0..2){
+                block(c,x-25f,y-8f+i*7f,10f,3f,beast)
+                block(c,x+15f,y-8f+i*7f,10f,3f,beast)
+            }
+            return
+        }
+        if(!boss&&("призрак" in species||"дух" in species)){
+            block(c,x-14f,y-25f,28f,34f,0xFF9FBBC8.toInt())
+            block(c,x-10f,y-29f,20f,11f,0xFFD4ECF3.toInt())
+            block(c,x-10f,y+9f,7f,9f,0xFF9FBBC8.toInt())
+            block(c,x+4f,y+8f,7f,10f,0xFF9FBBC8.toInt())
+            block(c,x-8f,y-17f,5f,7f,0xFF3F5177.toInt())
+            block(c,x+4f,y-17f,5f,7f,0xFF3F5177.toInt())
+            return
+        }
+        if(!boss&&("культист" in species||"лич" in species||"демон" in species)){
+            block(c,x-14f,y-20f,28f,40f,0xFF6B516C.toInt())
+            block(c,x-10f,y-30f,20f,18f,0xFF4A405C.toInt())
+            block(c,x-8f,y-18f,16f,8f,0xFFC9A5A3.toInt())
+            dot(c,x-5f,y-16f,0xFFDA7B63.toInt(),3f)
+            dot(c,x+4f,y-16f,0xFFDA7B63.toInt(),3f)
+            block(c,x+17f,y-24f,3f,40f,0xFFB3A17C.toInt())
+            block(c,x+14f,y-29f,9f,9f,0xFFD97C72.toInt())
+            return
+        }
         val bigger=if(boss)5f else 0f
         val wob=if(frame%12<6)0f else 2f
         val body=when(h.biomeId){

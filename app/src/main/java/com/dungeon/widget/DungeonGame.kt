@@ -35,6 +35,7 @@ data class HeroState(
     var skillAttack:Int=0,var skillDefense:Int=0,var skillLuck:Int=0,
     var shards:Int=0,var forge:Int=0,var healer:Int=0,var scouts:Int=0,
     var lastDamage:Int=0,var cooldown:Int=0,var status:String="",
+    var effectType:String="",var effectTicks:Int=0,
     var recovery:Int=0,var autoPotion:Int=35,var autoSalvage:Boolean=false,
     var theme:Int=0,var opacity:Int=92,var eco:Boolean=false,
     var questDay:String="",var questCount:Int=0,var questClaimed:Boolean=false,
@@ -76,7 +77,7 @@ data class HeroState(
         put("armorName",armorName);put("roomKind",roomKind);put("status",status)
         put("autoSalvage",autoSalvage);put("eco",eco);put("questDay",questDay)
         put("questClaimed",questClaimed);put("offlineReport",offlineReport)
-        put("lastReportAt",lastReportAt)
+        put("lastReportAt",lastReportAt);put("effectType",effectType);put("effectTicks",effectTicks)
         put("gear",JSONArray().apply{gear.forEach{put(it.json())}})
         put("equipment",JSONObject().apply{equipment.forEach{(k,v)->put(k,v)}})
         put("discovered",JSONArray(discovered.toList()))
@@ -104,7 +105,8 @@ data class HeroState(
             h.skillLuck=o.optInt("skillLuck");h.shards=o.optInt("shards")
             h.forge=o.optInt("forge");h.healer=o.optInt("healer");h.scouts=o.optInt("scouts")
             h.lastDamage=o.optInt("lastDamage");h.cooldown=o.optInt("cooldown")
-            h.status=o.optString("status");h.recovery=o.optInt("recovery")
+            h.status=o.optString("status");h.effectType=o.optString("effectType")
+            h.effectTicks=o.optInt("effectTicks");h.recovery=o.optInt("recovery")
             h.autoPotion=o.optInt("autoPotion",35).coerceIn(10,90)
             h.autoSalvage=o.optBoolean("autoSalvage");h.theme=o.optInt("theme").coerceIn(0,2)
             h.opacity=o.optInt("opacity",92).coerceIn(20,100);h.eco=o.optBoolean("eco")
@@ -230,12 +232,42 @@ object DungeonGame{
             h.log="Разобрано: "+item.name+" · материалы +"+(1+item.rarity*2);true
         }
     }
+    fun improveWeapon(ctx:Context)=mutate(ctx){h->
+        val item=h.weaponItem
+        val cost=20+h.level*3
+        val materials=4+h.forge
+        if(item==null||h.gold<cost||h.shards<materials)false else{
+            h.gold-=cost;h.shards-=materials
+            val idx=h.gear.indexOfFirst{it.id==item.id}
+            h.gear[idx]=item.copy(power=item.power+2+h.forge)
+            h.log="Оружие усилено на кузнице";true
+        }
+    }
     fun forgeItem(ctx:Context)=mutate(ctx){h->
         val cost=30+h.forge*12;val mats=5+h.forge*2
         if(h.gold<cost||h.shards<mats)false else{
             h.gold-=cost;h.shards-=mats
             collect(h,createGear(h,true))
             h.log="Кузница создала новое снаряжение";true
+        }
+    }
+    fun merchantOffer(h:HeroState,index:Int):Gear{
+        val names=listOf("Клинок хранителя","Доспех пилигрима","Кольцо рассвета")
+        val slots=listOf("weapon","armor","ring")
+        val traits=listOf("крит","защита","регенерация")
+        val rarity=if(h.bestFloor>=10)2 else 1
+        return Gear("shop-"+today()+"-"+index,names[index.coerceIn(0,2)],
+            slots[index.coerceIn(0,2)],rarity,3+h.floor/3+index*2,
+            traits[index.coerceIn(0,2)],if(index==2)1 else 0)
+    }
+    fun buyOffer(ctx:Context,index:Int)=mutate(ctx){h->
+        if(index !in 0..2)return@mutate false
+        val cost=70+h.floor*3+index*25
+        if(h.gold<cost)false else{
+            h.gold-=cost
+            val offer=merchantOffer(h,index)
+            collect(h,offer.copy(id=System.nanoTime().toString()))
+            h.log="Куплено: "+offer.name;true
         }
     }
     fun buyFromMerchant(ctx:Context)=mutate(ctx){h->
@@ -264,7 +296,10 @@ object DungeonGame{
             else->listOf("Амулет","Оберег","Талисман","Реликварий")
         }
         val prefix=listOf("Забытый","Ночной","Огненный","Рунный","Древний","Ледяной")
-        val name=prefix.random()+" "+names.random()
+        val name=if(rarity==4)when(slot){
+            "weapon"->"Гибель королей";"armor"->"Панцирь вечной ночи"
+            "ring"->"Печать звёзд";else->"Сердце бездны"
+        }else prefix.random()+" "+names.random()
         val trait=when(Random.nextInt(5)){0->"крит";1->"яд";2->"регенерация";3->"уклонение";else->"защита"}
         return Gear(System.nanoTime().toString()+"-"+Random.nextInt(10000),
             name,slot,rarity,(1+h.floor/3+rarity*3+Random.nextInt(3)).coerceAtMost(180),trait,
@@ -288,7 +323,7 @@ object DungeonGame{
     }
     private fun death(h:HeroState){
         h.deaths++;h.hp=h.maxHp;h.floor=1;h.room=1
-        h.pathStep=0;h.combo=0;h.recovery=4;h.status=""
+        h.pathStep=0;h.combo=0;h.recovery=4;h.status="";h.effectTicks=0;h.effectType=""
         h.potions=max(2,h.potions);h.event="camp"
         h.log="Герой пал! Возвращение в лагерь. Экипировка сохранена"
     }
@@ -301,6 +336,7 @@ object DungeonGame{
     }
     private fun roomRoll(h:HeroState):String{
         if(h.room==8&&h.floor%10==0)return "boss"
+        if(DungeonMap.get(h.floor,h.room).secret!=null&&Random.nextInt(100)<25)return "secret"
         val roll=Random.nextInt(100)
         return when{
             roll<54->"battle";roll<72->"chest";roll<80->"potion"
@@ -325,6 +361,13 @@ object DungeonGame{
         h.gold+=5+h.floor+Random.nextInt(10)+(if(boss)120 else 0)
         val traits=h.gear.filter{h.equipment.values.contains(it.id)}.map{it.trait}
         if("регенерация" in traits||h.combo%6==0)h.hp=min(h.maxHp,h.hp+3+h.level)
+        if(!dodge && Random.nextInt(100)<(if(boss)33 else 13)){
+            h.effectType=when(h.biomeId){
+                0->if(Random.nextBoolean())"bleed" else "stun"
+                1->"poison";2->"burn";else->"stun"
+            }
+            h.effectTicks=if(h.effectType=="stun")1 else 3
+        }
         h.status=when{
             "яд" in traits&&Random.nextInt(4)==0->"Яд"
             crit->"Критический удар"
@@ -342,6 +385,11 @@ object DungeonGame{
         h.status=""
         when(h.roomKind){
             "battle","boss"->combat(h,h.roomKind=="boss")
+            "secret"->{
+                h.relics++;h.gems+=2;h.gold+=45+h.floor*3
+                collect(h,createGear(h,true));h.event="relic"
+                h.log="Тайная комната! Найдены сокровища и реликвия"
+            }
             "chest"->{
                 h.chests++;h.gold+=15+h.floor*5+Random.nextInt(24)
                 if(Random.nextInt(100)<48+h.scouts)collect(h,createGear(h))
@@ -381,16 +429,36 @@ object DungeonGame{
             h.potions--;h.hp=min(h.maxHp,h.hp+30+h.level*4)
             h.event="potion";h.log="Автоматически использовано зелье";return
         }
+        if(h.effectTicks>0){
+            when(h.effectType){
+                "stun"->{h.effectTicks--;h.status="Оглушение";h.log="Герой оглушён и пропускает шаг";return}
+                "poison","bleed","burn"->{
+                    if(h.pathStep%4==0){
+                        val hit=(2+h.floor/3).coerceAtLeast(2)
+                        h.hp-=hit;h.effectTicks--
+                        h.status=when(h.effectType){
+                            "poison"->"Отравление";"bleed"->"Кровотечение";else->"Горение"}
+                        if(h.hp<=0){death(h);return}
+                    }
+                }
+            }
+            if(h.effectTicks<=0)h.effectType=""
+        }
         if(h.pathStep==0){
             h.roomKind=roomRoll(h);h.event="explore"
             h.enemy=if(h.roomKind=="boss")"Босс" else enemyPools[h.biomeId].random()
         }
+        val pathLength=DungeonMap.get(h.floor,h.room).path.size
+        val layout=DungeonMap.get(h.floor,h.room)
+        val secretIndex=layout.secret?.let{layout.path.indexOf(it)}?:-1
+        val encounter=if(h.roomKind=="secret"&&secretIndex>0)secretIndex
+            else (pathLength*2/3).coerceAtLeast(8).coerceAtMost(pathLength-2)
         h.pathStep++
-        if(h.pathStep==12){
+        if(h.pathStep==encounter){
             resolve(h)
             if(h.event=="camp")return
         }
-        if(h.pathStep>=ROOM_STEPS){
+        if(h.pathStep>=pathLength-1){
             h.pathStep=0;h.room++;h.roomsCleared++
             if(h.room>8){
                 h.room=1;h.floor++;h.bestFloor=max(h.bestFloor,h.floor)
