@@ -13,69 +13,76 @@ import android.widget.ScrollView
 import android.widget.TextView
 import android.os.Handler
 import android.os.Looper
+import android.widget.Toast
 
 class MainActivity:Activity() {
-    private val handler=Handler(Looper.getMainLooper())
-    private lateinit var title:TextView
-    private lateinit var stats:TextView
-    private lateinit var loot:TextView
-    private lateinit var scene:ImageView
-    private lateinit var pause:Button
-    private var frame=0
-    private val loop=object:Runnable {
-        override fun run() {
-            if(!isFinishing) {
-                redraw()
-                handler.postDelayed(this,1500)
-            }
-        }
-    }
-    private fun label(text:String,size:Float=16f):TextView =
-        TextView(this).apply {
-            this.text=text;textSize=size;setTextColor(Color.rgb(228,231,222))
-            setPadding(12,12,12,12);gravity=Gravity.CENTER
-        }
-    override fun onCreate(savedInstanceState:Bundle?) {
-        super.onCreate(savedInstanceState)
-        window.statusBarColor=Color.rgb(15,21,30)
-        window.navigationBarColor=Color.rgb(15,21,30)
-        val root=LinearLayout(this).apply {
-            orientation=LinearLayout.VERTICAL
-            setBackgroundColor(Color.rgb(17,23,32))
-            setPadding(10,16,10,16)
-        }
-        title=label("DUNGEON WIDGET",23f).apply {
-            setTextColor(Color.rgb(237,202,130));setTypeface(null,Typeface.BOLD)
-        }
-        root.addView(title)
-        scene=ImageView(this).apply {
-            adjustViewBounds=true;scaleType=ImageView.ScaleType.FIT_CENTER
-        }
-        root.addView(scene,LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,0,2f))
-        stats=label("",17f);root.addView(stats)
-        loot=label("",15f);root.addView(loot)
-        pause=Button(this).apply {
-            setOnClickListener { DungeonGame.toggle(this@MainActivity);redraw() }
-        }
-        root.addView(pause)
-        root.addView(Button(this).apply {
-            text="⬇ Проверить обновления"
-            setOnClickListener { UpdateChecker.check(this@MainActivity,true) }
-        })
-        root.addView(label("Подземелье исследуется само. Прогресс сохраняется.\nДобавь Dungeon Widget через меню виджетов главного экрана.",13f))
-        setContentView(root)
-        redraw()
-        UpdateChecker.check(this)
-    }
-    override fun onResume() {super.onResume();handler.removeCallbacks(loop);handler.post(loop)}
-    override fun onPause() {handler.removeCallbacks(loop);super.onPause()}
-    private fun redraw() {
-        val h=DungeonGame.advance(this)
-        title.text="⚔ DUNGEON · Этаж ${h.floor} · Комната ${h.room}"
-        stats.text="❤ ${h.hp}/${h.maxHp}     ★ Уровень ${h.level}     🪙 ${h.gold}\n${h.log}"
-        loot.text="⚔ Меч +${h.weapon}     🛡 Броня +${h.armor}     🧪 Зелья: ${h.potions}\nПобед: ${h.kills}     Опыт: ${h.xp}/${h.level*22}"
-        pause.text=if(h.paused) "▶ ПРОДОЛЖИТЬ" else "⏸ ПАУЗА"
-        scene.setImageBitmap(DungeonScene.render(h,frame++))
-        DungeonWidgetProvider.refreshAll(this)
-    }
+ private val handler=Handler(Looper.getMainLooper())
+ private lateinit var title:TextView
+ private lateinit var stats:TextView
+ private lateinit var loot:TextView
+ private lateinit var progress:TextView
+ private lateinit var scene:ImageView
+ private lateinit var pause:Button
+ private lateinit var campButton:Button
+ private lateinit var potionButton:Button
+ private var frame=0
+ private val loop=object:Runnable {
+  override fun run(){if(!isFinishing){redraw();handler.postDelayed(this,1500)}}
+ }
+ private fun label(text:String,size:Float=16f):TextView=TextView(this).apply {
+  this.text=text;textSize=size;setTextColor(Color.rgb(228,231,222))
+  setPadding(12,10,12,10);gravity=Gravity.CENTER
+ }
+ override fun onCreate(savedInstanceState:Bundle?){
+  super.onCreate(savedInstanceState)
+  window.statusBarColor=Color.rgb(15,21,30);window.navigationBarColor=Color.rgb(15,21,30)
+  val root=LinearLayout(this).apply {
+   orientation=LinearLayout.VERTICAL;setBackgroundColor(Color.rgb(17,23,32));setPadding(10,12,10,12)
+  }
+  val scroll=ScrollView(this).apply {fillViewport=true}
+  val body=LinearLayout(this).apply {orientation=LinearLayout.VERTICAL}
+  title=label("DUNGEON WIDGET",22f).apply {
+   setTextColor(Color.rgb(237,202,130));setTypeface(null,Typeface.BOLD)
+  }
+  body.addView(title)
+  scene=ImageView(this).apply {adjustViewBounds=true;scaleType=ImageView.ScaleType.FIT_CENTER}
+  body.addView(scene,LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,0,1f))
+  stats=label("",17f);body.addView(stats)
+  loot=label("",15f);body.addView(loot)
+  progress=label("",14f);body.addView(progress)
+  pause=Button(this).apply {setOnClickListener {DungeonGame.toggle(this@MainActivity);redraw()}}
+  body.addView(pause)
+  campButton=Button(this).apply {
+   setOnClickListener {
+    if(!DungeonGame.upgradeCamp(this@MainActivity))Toast.makeText(this@MainActivity,"Недостаточно золота",Toast.LENGTH_SHORT).show()
+    redraw()
+   }
+  };body.addView(campButton)
+  potionButton=Button(this).apply {
+   setOnClickListener {
+    if(!DungeonGame.buyPotion(this@MainActivity))Toast.makeText(this@MainActivity,"Недостаточно золота",Toast.LENGTH_SHORT).show()
+    redraw()
+   }
+  };body.addView(potionButton)
+  body.addView(Button(this).apply {
+   text="⬇ Проверить обновления";setOnClickListener{UpdateChecker.check(this@MainActivity,true)}
+  })
+  body.addView(label("Герой исследует подземелье самостоятельно.\nПри смерти возвращается в лагерь без потери снаряжения.",13f))
+  scroll.addView(body);root.addView(scroll,LinearLayout.LayoutParams(-1,-1))
+  setContentView(root);redraw();UpdateChecker.check(this)
+ }
+ override fun onResume(){super.onResume();handler.removeCallbacks(loop);handler.post(loop)}
+ override fun onPause(){handler.removeCallbacks(loop);super.onPause()}
+ private fun redraw(){
+  val h=DungeonGame.advance(this)
+  title.text="⚔ ${h.biome} · Этаж ${h.floor} · ${h.room}/8"
+  stats.text="❤ ${h.hp}/${h.maxHp}    ★ ${h.level}    🪙 ${h.gold}\n${h.log}"
+  loot.text="⚔ ${h.weaponName} +${h.weapon}\n🛡 ${h.armorName} +${h.armor}   🧪 ${h.potions}"
+  progress.text="Опыт: ${h.xp}/${h.level*22}   💎 ${h.gems}   ⛺ Лагерь ${h.camp}\nПобед: ${h.kills}   Боссов: ${h.bosses}   Сундуков: ${h.chests}\nРеликвий: ${h.relics}   Рекорд: этаж ${h.bestFloor}   Смертей: ${h.deaths}"
+  pause.text=if(h.paused)"▶ ПРОДОЛЖИТЬ" else "⏸ ПАУЗА"
+  campButton.text="⛺ Улучшить лагерь (+6 HP) · ${80+h.camp*70} золота"
+  potionButton.text="🧪 Купить зелье · ${25+h.floor*2} золота"
+  scene.setImageBitmap(DungeonScene.render(h,frame++))
+  DungeonWidgetProvider.refreshAll(this)
+ }
 }
