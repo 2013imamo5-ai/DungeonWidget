@@ -1,14 +1,39 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
-    android:orientation="vertical" android:padding="12dp"
-    android:background="#18202B" android:layout_width="match_parent" android:layout_height="match_parent">
-    <TextView android:id="@+id/widgetTitle" android:layout_width="match_parent" android:layout_height="wrap_content"
-        android:text="⚔ DUNGEON WIDGET" android:textColor="#E9D49A" android:textSize="15sp" android:textStyle="bold"/>
-    <ImageView android:id="@+id/widgetScene" android:layout_width="match_parent" android:layout_height="0dp"
-        android:layout_weight="1" android:scaleType="fitCenter" android:contentDescription="Dungeon scene"/>
-    <TextView android:id="@+id/widgetStatus" android:layout_width="match_parent" android:layout_height="wrap_content"
-        android:textColor="#E3E9ED" android:textSize="12sp" android:maxLines="2"/>
-    <TextView android:id="@+id/widgetAction" android:layout_width="match_parent" android:layout_height="wrap_content"
-        android:text="⏸ Пауза / ▶ Продолжить" android:gravity="center" android:padding="5dp"
-        android:textColor="#E9D49A" android:background="#2E3A49" android:textSize="12sp"/>
+    android:id="@+id/widgetRoot"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:padding="7dp"
+    android:orientation="vertical"
+    android:background="#E8111822">
+    <TextView android:id="@+id/widgetTitle"
+        android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:text="⚔ ПОДЗЕМЕЛЬЕ" android:ellipsize="end" android:maxLines="1"
+        android:textSize="13sp" android:textStyle="bold" android:textColor="#F0C783"/>
+    <ImageView android:id="@+id/widgetScene"
+        android:layout_width="match_parent" android:layout_height="0dp"
+        android:layout_weight="1" android:scaleType="fitCenter"
+        android:contentDescription="Пиксельное подземелье"/>
+    <TextView android:id="@+id/widgetStatus"
+        android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:text="♥ 40/40   ★ 1   ◉ 0" android:maxLines="1" android:ellipsize="end"
+        android:textSize="12sp" android:textColor="#EEE8D8"/>
+    <TextView android:id="@+id/widgetDetail"
+        android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:text="Забытый склеп" android:maxLines="1"
+        android:textSize="10sp" android:textColor="#A5BAC6"/>
+    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:orientation="horizontal" android:paddingTop="3dp">
+        <TextView android:id="@+id/widgetAction" android:layout_width="0dp"
+            android:layout_weight="1" android:layout_height="wrap_content"
+            android:text="Ⅱ ПАУЗА" android:gravity="center"
+            android:background="#354454" android:padding="5dp"
+            android:textColor="#F0C783" android:textStyle="bold" android:textSize="11sp"/>
+        <TextView android:id="@+id/widgetPotion" android:layout_width="0dp"
+            android:layout_weight="1" android:layout_height="wrap_content"
+            android:layout_marginStart="4dp"
+            android:text="✚ ЗЕЛЬЕ" android:gravity="center"
+            android:background="#2D4B42" android:padding="5dp"
+            android:textColor="#B6E0C8" android:textStyle="bold" android:textSize="11sp"/>
+    </LinearLayout>
 </LinearLayout>
