@@ -39,7 +39,7 @@ class MainActivity:Activity() {
   val root=LinearLayout(this).apply {
    orientation=LinearLayout.VERTICAL;setBackgroundColor(Color.rgb(17,23,32));setPadding(10,12,10,12)
   }
-  val scroll=ScrollView(this).apply {fillViewport=true}
+  val scroll=ScrollView(this).apply {isFillViewport=true}
   val body=LinearLayout(this).apply {orientation=LinearLayout.VERTICAL}
   title=label("DUNGEON WIDGET",22f).apply {
    setTextColor(Color.rgb(237,202,130));setTypeface(null,Typeface.BOLD)
