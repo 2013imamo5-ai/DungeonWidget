@@ -46,7 +46,7 @@ class MainActivity:Activity() {
   }
   body.addView(title)
   scene=ImageView(this).apply {adjustViewBounds=true;scaleType=ImageView.ScaleType.FIT_CENTER}
-  body.addView(scene,LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,0,1f))
+  body.addView(scene,LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,260))
   stats=label("",17f);body.addView(stats)
   loot=label("",15f);body.addView(loot)
   progress=label("",14f);body.addView(progress)
