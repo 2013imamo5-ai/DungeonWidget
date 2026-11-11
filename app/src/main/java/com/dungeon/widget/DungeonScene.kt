@@ -20,7 +20,7 @@ object DungeonScene {
         fun rgb(code:Long)=code.toInt()
         c.drawColor(Color.rgb(17,23,32))
         for(y in 0 until 11) for(x in 0 until 20) {
-            val n=(x*17+y*23+h.floor*7)%5
+            val n=(x*17+y*23+h.floor*7+h.room*11)%5
             rect(x*16f,y*16f,15f,15f,if(n<2) Color.rgb(41,48,59) else Color.rgb(47,54,65))
             if(n==0) rect(x*16f+3,y*16f+4,6f,2f,Color.rgb(55,62,74))
         }
@@ -36,7 +36,7 @@ object DungeonScene {
         }
         val bob=if(frame%2==0) 0f else 3f
         // Knight: chunky hand-painted pixel blocks
-        val x=95f+((frame%4)*2)
+        val x=68f+((h.room-1)*18f)+((frame%4)*2)
         val y=86f+bob
         rect(x-16,y+37,14f,15f,Color.rgb(56,61,76))
         rect(x+4,y+37,14f,15f,Color.rgb(56,61,76))
@@ -51,8 +51,8 @@ object DungeonScene {
         rect(x-29,y+11,15f,27f,Color.rgb(115,82,58))
         rect(x-25,y+16,7f,12f,Color.rgb(182,150,99))
         // Skeleton
-        val ex=225f
-        rect(ex-15,89f,30f,26f,Color.rgb(194,188,168))
+        val ex=225f+if(h.event=="boss") -12f else 0f
+        rect(ex-15,89f,30f,26f,if(h.event=="boss") Color.rgb(137,64,78) else if(h.floor%10>5) Color.rgb(108,175,190) else Color.rgb(194,188,168))
         rect(ex-17,75f,34f,27f,Color.rgb(214,211,192))
         rect(ex-11,87f,7f,7f,Color.rgb(33,28,31))
         rect(ex+4,87f,7f,7f,Color.rgb(33,28,31))
