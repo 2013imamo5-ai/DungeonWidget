@@ -155,6 +155,26 @@ object EquipmentLogic {
         equip(h,g,slot=="ring2")
         return true
     }
+    // Manual cleanup only: keep equipped, favorited and unreviewed loot,
+    // best two pieces per slot (four rings), and the best piece for each set/slot.
+    // Higher rarities are never discarded by unattended auto-salvage.
+    fun duplicateCandidates(h:HeroState,includeLegendary:Boolean=false):List<Gear>{
+        val keep=HashSet<String>()
+        keep.addAll(h.equipment.values)
+        keep.addAll(h.favorites)
+        keep.addAll(h.newItems)
+        for(group in h.gear.groupBy{it.slot}.values){
+            val limit=if(group.firstOrNull()?.slot=="ring")4 else 2
+            keep.addAll(group.sortedByDescending{weight(it,h.heroClass)}
+                .take(limit).map{it.id})
+        }
+        for(group in h.gear.filter{it.set>0}.groupBy{it.set to it.slot}.values){
+            val best=group.maxByOrNull{weight(it,h.heroClass)}
+            if(best!=null)keep.add(best.id)
+        }
+        return h.gear.filter{it.id !in keep && (includeLegendary||it.rarity<4)}
+            .sortedWith(compareBy<Gear>{it.rarity}.thenBy{weight(it,h.heroClass)})
+    }
     fun makeInventoryRoom(h:HeroState,item:Gear,capacity:Int=60):Boolean{
         if(h.gear.size<capacity)return true
         val replace=h.gear.filter{canSalvage(h,it)}

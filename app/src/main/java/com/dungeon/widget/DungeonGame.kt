@@ -304,6 +304,18 @@ object DungeonGame{
             true
         }
     }
+    fun salvageDuplicates(ctx:Context,includeLegendary:Boolean=false)=mutate(ctx){h->
+        val dupes=EquipmentLogic.duplicateCandidates(h,includeLegendary)
+        if(dupes.isEmpty())false else{
+            val ids=dupes.map{it.id}.toHashSet()
+            h.gear.removeAll{it.id in ids}
+            // Safety: equipped / manually favorited / unreviewed are never candidates.
+            h.shards+=dupes.sumOf{1+it.rarity*2}
+            h.log="Разобраны дубликаты: "+dupes.size+" предметов · +"+
+                dupes.sumOf{1+it.rarity*2}+" материалов"
+            true
+        }
+    }
     fun salvageFiltered(ctx:Context,rarity:Int,slot:String="all")=mutate(ctx){h->
         val selected=h.gear.filter{
             it.rarity<=rarity && (slot=="all"||it.slot==slot) &&

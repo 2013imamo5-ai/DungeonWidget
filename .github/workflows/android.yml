@@ -37,10 +37,10 @@ jobs:
       - name: Build permanently signed APK
         run: |
           gradle --no-daemon :app:assembleRelease
-          cp app/build/outputs/apk/release/app-release.apk DungeonWidget-v0.6.0.apk
+          cp app/build/outputs/apk/release/app-release.apk DungeonWidget-v0.6.1.apk
       - name: Publish direct APK
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release view v0.6.0 >/dev/null 2>&1 && gh release delete v0.6.0 --yes || true
-          gh release create v0.6.0 DungeonWidget-v0.6.0.apk --title "Dungeon Widget v0.6.0" --notes "Visual combat update: multi-round battles with enemy HP, telegraphed boss strikes, class- and weapon-specific attack animations, equipped armor and accessories rendered directly on the hero. Existing save files and APK signing preserved."
+          gh release view v0.6.1 >/dev/null 2>&1 && gh release delete v0.6.1 --yes || true
+          gh release create v0.6.1 DungeonWidget-v0.6.1.apk --title "Dungeon Widget v0.6.1" --notes "Inventory cleanup update: manual review and breakdown of redundant high-quality gear with safety protection for equipped, favorited and unread items; collapsed inventory filters and clearer protection counters. Existing saves preserved."

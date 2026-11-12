@@ -31,6 +31,7 @@ class InventoryActivity:Activity(){
     private var filterRarity=-1
     private var focusedSlot="ring"
     private var quickFilter=0
+    private var filtersExpanded=false
     private var query=""
     private val gold=0xFFEBC383.toInt()
     private val ivory=0xFFF1EFE9.toInt()
@@ -162,8 +163,25 @@ class InventoryActivity:Activity(){
         card("РЮКЗАК · "+h.gear.size+"/"+h.inventoryLimit){
             add(this,"Нажми на предмет, чтобы сравнить, надеть, защитить или разобрать.",12f,faded)
             gap(this,5)
-            add(this,"🔒 "+h.gear.count{EquipmentLogic.isProtected(h,it)}+
-                " защищено   ✦ "+h.newItems.size+" новых",12f,gold,true)
+            add(this,"🔒 Вручную: "+h.favorites.size+
+                "   ⛨ Надето: "+h.equipment.values.distinct().size+
+                "   ✦ Новых: "+h.newItems.size,12f,gold,true)
+            add(this,"Автозащита редких и комплектных: "+
+                h.gear.count{EquipmentLogic.isProtected(h,it)},11f,faded)
+        }
+        if(h.gear.size>=h.inventoryLimit-10){
+            card("♻ ОСВОБОДИТЬ МЕСТО"){
+                add(this,"Игра сохранит надетые, избранные, непросмотренные и лучшие вещи каждого типа и комплекта.",12f,faded)
+                val common=EquipmentLogic.duplicateCandidates(h,false)
+                val all=EquipmentLogic.duplicateCandidates(h,true)
+                button(this,"ОЧИСТИТЬ ДУБЛИКАТЫ · "+common.size+" (БЕЗ ЛЕГЕНДАРНЫХ)"){
+                    confirmDuplicates(false)
+                }
+                button(this,"ПРОВЕРИТЬ И ЛЕГЕНДАРНЫЕ · "+all.size){
+                    confirmDuplicates(true)
+                }
+                add(this,"Перед разбором появится список предметов и подтверждение.",11f,faded)
+            }
         }
         card("БЫСТРЫЙ ОТБОР"){
             val options=listOf("ВСЕ","НОВЫЕ","ИЗБРАННОЕ","НАДЕТО")
@@ -179,6 +197,11 @@ class InventoryActivity:Activity(){
             }
         }
         card("ФИЛЬТРЫ И СОРТИРОВКА"){
+            button(this,if(filtersExpanded)"▴ СВЕРНУТЬ ФИЛЬТРЫ" else "▾ ПОКАЗАТЬ ФИЛЬТРЫ"){
+                filtersExpanded=!filtersExpanded
+                draw()
+            }
+            if(filtersExpanded){
             val slots=listOf("all","weapon","armor","helmet","gloves","boots","ring","amulet")
             slots.chunked(4).forEach{group->
                 val line=row(this)
@@ -204,6 +227,7 @@ class InventoryActivity:Activity(){
             val sortLine=row(this)
             listOf("РЕДКОСТЬ","СИЛА","ТИП","ИЗБРАННОЕ").forEachIndexed{idx,name->
                 button(sortLine,name,1f,sortMode==idx){sortMode=idx;draw()}
+            }
             }
         }
         val items=h.gear.filter{
@@ -383,6 +407,28 @@ class InventoryActivity:Activity(){
             }
             add(this,"Эпические, легендарные и комплектные вещи автоматически защищены.",12f,faded)
         }
+    }
+    private fun confirmDuplicates(includeLegendary:Boolean){
+        val candidates=EquipmentLogic.duplicateCandidates(h,includeLegendary)
+        if(candidates.isEmpty()){
+            Toast.makeText(this,"Лишних дубликатов нет",Toast.LENGTH_SHORT).show()
+            return
+        }
+        val materials=candidates.sumOf{1+it.rarity*2}
+        val examples=candidates.take(7).joinToString("\\n"){item->
+            "• "+item.name+" · "+"★".repeat(item.rarity+1)+" · +"+item.power
+        }
+        val extra=if(candidates.size>7)"\\n… и ещё "+(candidates.size-7)+" предметов" else ""
+        val warning=if(includeLegendary)
+            "\\nВНИМАНИЕ: среди них могут быть легендарные предметы!" else
+            "\\nЛегендарные предметы не затрагиваются."
+        AlertDialog.Builder(this)
+            .setTitle("Разобрать "+candidates.size+" дубликатов?")
+            .setMessage(examples+extra+"\\n\\nМатериалы: +"+materials+warning+
+                "\\nНадетые, избранные и новые находки остаются. Отменить разбор нельзя.")
+            .setPositiveButton("РАЗОБРАТЬ "+candidates.size){_,_->
+                change{DungeonGame.salvageDuplicates(this@InventoryActivity,includeLegendary)}
+            }.setNegativeButton("ОТМЕНА",null).show()
     }
     private fun confirmBulk(maxRarity:Int){
         val items=h.gear.filter{it.rarity<=maxRarity&&EquipmentLogic.canSalvage(h,it)}
