@@ -46,7 +46,8 @@ data class HeroState(
     val discovered:MutableSet<String> = mutableSetOf(),
     val achievements:MutableSet<String> = mutableSetOf(),
     val favorites:MutableSet<String> = mutableSetOf(),
-    val newItems:MutableSet<String> = mutableSetOf()
+    val newItems:MutableSet<String> = mutableSetOf(),
+    val lootHistory:MutableList<String> = mutableListOf()
 ){
     val maxHp:Int get()=40+(level-1)*8+camp*6+healer*10+(if(heroClass==0)10 else 0)+equipmentStats.health
     val equipmentStats:EquipmentStats get()=EquipmentLogic.stats(this)
@@ -86,6 +87,7 @@ data class HeroState(
         put("autoEquip",autoEquip);put("autoSalvageRarity",autoSalvageRarity)
         put("favorites",JSONArray(favorites.toList()))
         put("newItems",JSONArray(newItems.toList()))
+        put("lootHistory",JSONArray(lootHistory.toList()))
         put("gear",JSONArray().apply{gear.forEach{put(it.json())}})
         put("equipment",JSONObject().apply{equipment.forEach{(k,v)->put(k,v)}})
         put("discovered",JSONArray(discovered.toList()))
@@ -134,6 +136,9 @@ data class HeroState(
             if(starred!=null)for(i in 0 until starred.length())h.favorites.add(starred.optString(i))
             val unread=o.optJSONArray("newItems")
             if(unread!=null)for(i in 0 until unread.length())h.newItems.add(unread.optString(i))
+            val entries=o.optJSONArray("lootHistory")
+            if(entries!=null)for(i in 0 until entries.length())
+                h.lootHistory.add(entries.optString(i))
             val seen=o.optJSONArray("discovered")
             if(seen!=null)for(i in 0 until seen.length())h.discovered.add(seen.optString(i))
             val medals=o.optJSONArray("achievements")
@@ -251,6 +256,9 @@ object DungeonGame{
         }
     }
     fun viewItem(ctx:Context,id:String)=mutate(ctx){h->h.newItems.remove(id)}
+    fun markAllViewed(ctx:Context)=mutate(ctx){h->
+        if(h.newItems.isEmpty())false else{h.newItems.clear();true}
+    }
     fun equipBest(ctx:Context,role:Int)=mutate(ctx){h->
         if(role !in 0..2)false else{
             h.heroClass=role
@@ -383,6 +391,10 @@ object DungeonGame{
             name,slot,rarity,(1+h.floor/3+rarity*3+Random.nextInt(3)).coerceAtMost(180),trait,
             if(Random.nextInt(4)==0)Random.nextInt(1,4) else 0)
     }
+    private fun recordLoot(h:HeroState,description:String){
+        h.lootHistory.add(0,description)
+        if(h.lootHistory.size>16)h.lootHistory.subList(16,h.lootHistory.size).clear()
+    }
     private fun collect(h:HeroState,item:Gear){
         val safeToScrap=item.rarity<3 && item.set==0
         // Never discard a potentially useful item just because it is low rarity:
@@ -393,20 +405,26 @@ object DungeonGame{
         if(h.autoSalvage && item.rarity<=h.autoSalvageRarity &&
             safeToScrap && !upgrade){
             h.shards+=1+item.rarity*2
+            recordLoot(h,"⚒ Разобрано: "+item.name)
             return
         }
         if(!EquipmentLogic.makeInventoryRoom(h,item,h.inventoryLimit)){
             h.shards+=1+item.rarity*2
+            recordLoot(h,"⚠ Рюкзак полон · разобрано: "+item.name)
             return
         }
         h.gear.add(item)
         h.newItems.add(item.id)
+        var worn=false
         if(h.equipment[item.slot]==null &&
             !(item.slot=="ring" && h.equipment["ring2"]!=null)){
             EquipmentLogic.equip(h,item)
+            worn=true
         }else{
-            EquipmentLogic.autoEquip(h,item)
+            worn=EquipmentLogic.autoEquip(h,item)
         }
+        recordLoot(h,(if(worn)"✓ Надето: " else "✦ Найдено: ")+item.name+
+            " · "+rarityName(item.rarity))
     }
     private fun gainXp(h:HeroState,amount:Int){
         h.xp+=amount

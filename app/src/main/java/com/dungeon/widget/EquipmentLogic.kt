@@ -105,18 +105,43 @@ object EquipmentLogic {
         h.equipment[slot]=g.id
         h.hp=h.hp.coerceAtMost(h.maxHp)
     }
+    private fun value(s:EquipmentStats,role:Int):Int = when(role){
+        0->s.attack*4+s.defense*6+s.health/2+s.crit*3+s.dodge*3+
+            s.regeneration*5+s.poison*2
+        1->s.attack*5+s.defense*3+s.health/3+s.crit*6+s.dodge*6+
+            s.regeneration*4+s.poison*3
+        else->s.attack*7+s.defense*3+s.health/3+s.crit*5+s.dodge*3+
+            s.regeneration*3+s.poison*6
+    }
+    fun improvement(h:HeroState,g:Gear,slot:String=g.slot,role:Int=h.heroClass):Int{
+        if(g.slot=="ring" && slot !in listOf("ring","ring2"))return -100000
+        if(g.slot!="ring" && slot!=g.slot)return -100000
+        val equippedId=h.equipment[slot]
+        if(equippedId==g.id)return 0
+        if(equippedId!=null && equippedId in h.favorites)return -100000
+        val changed=h.equipment.toMutableMap()
+        if(g.slot=="ring"){
+            if(slot=="ring")changed.remove("ring2",g.id)
+            else changed.remove("ring",g.id)
+        }
+        changed[slot]=g.id
+        return value(stats(h,changed),role)-value(stats(h),role)
+    }
+    fun recommendation(h:HeroState,g:Gear):Int{
+        return if(g.slot=="ring")maxOf(improvement(h,g,"ring"),
+            improvement(h,g,"ring2")) else improvement(h,g)
+    }
     fun best(h:HeroState,role:Int,skipFavorites:Boolean=true):Int{
         var changed=0
         for(slot in slots){
             val itemSlot=if(slot=="ring2")"ring" else slot
-            val candidates=h.gear.filter{it.slot==itemSlot}
-                .filter{slot!="ring2"||it.id!=h.equipment["ring"]}
-                .filter{slot!="ring"||it.id!=h.equipment["ring2"]}
-            val optimal=candidates.maxByOrNull{weight(it,role)}?:continue
             val current=h.gear.firstOrNull{it.id==h.equipment[slot]}
-            if(current!=null&&current.id in h.favorites&&skipFavorites)continue
-            if(current==null || weight(optimal,role)>weight(current,role)){
-                equip(h,optimal,slot=="ring2")
+            if(skipFavorites && current!=null && current.id in h.favorites)continue
+            val best=h.gear.filter{it.slot==itemSlot}
+                .filter{it.id!=h.equipment[if(slot=="ring")"ring2" else "ring"] || itemSlot!="ring"}
+                .maxByOrNull{improvement(h,it,slot,role)} ?: continue
+            if(improvement(h,best,slot,role)>0){
+                equip(h,best,slot=="ring2")
                 changed++
             }
         }
@@ -124,26 +149,11 @@ object EquipmentLogic {
     }
     fun autoEquip(h:HeroState,g:Gear):Boolean{
         if(!h.autoEquip)return false
-        if(g.slot=="ring"){
-            val a=h.gear.firstOrNull{it.id==h.equipment["ring"]}
-            val b=h.gear.firstOrNull{it.id==h.equipment["ring2"]}
-            if(a==null){equip(h,g);return true}
-            if(b==null&&a.id!=g.id){equip(h,g,true);return true}
-            val options=listOfNotNull(a?.let{"ring" to it},b?.let{"ring2" to it})
-                .filter{it.second.id !in h.favorites}
-            val worst=options.minByOrNull{weight(it.second,h.heroClass)}?:return false
-            if(weight(g,h.heroClass)>weight(worst.second,h.heroClass)+4){
-                equip(h,g,worst.first=="ring2");return true
-            }
-            return false
-        }
-        val current=h.gear.firstOrNull{it.id==h.equipment[g.slot]}
-        if(current==null){equip(h,g);return true}
-        if(current.id in h.favorites)return false
-        if(weight(g,h.heroClass)>weight(current,h.heroClass)+4){
-            equip(h,g);return true
-        }
-        return false
+        val possible=if(g.slot=="ring")listOf("ring","ring2") else listOf(g.slot)
+        val slot=possible.maxByOrNull{improvement(h,g,it)}?:return false
+        if(improvement(h,g,slot)<=4)return false
+        equip(h,g,slot=="ring2")
+        return true
     }
     fun makeInventoryRoom(h:HeroState,item:Gear,capacity:Int=60):Boolean{
         if(h.gear.size<capacity)return true

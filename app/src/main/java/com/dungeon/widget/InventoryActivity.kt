@@ -2,6 +2,9 @@ package com.dungeon.widget
 
 import android.app.Activity
 import android.app.AlertDialog
+import android.text.Editable
+import android.text.TextWatcher
+import android.text.InputType
 import android.os.Bundle
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
@@ -9,6 +12,7 @@ import android.view.Gravity
 import android.view.View
 import android.view.WindowInsets
 import android.widget.ImageView
+import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
@@ -19,12 +23,15 @@ class InventoryActivity:Activity(){
     private lateinit var content:LinearLayout
     private lateinit var scroll:ScrollView
     private lateinit var tabs:LinearLayout
+    private lateinit var search:EditText
     private var h=HeroState()
     private var section=0
     private var sortMode=0
     private var filterSlot="all"
     private var filterRarity=-1
     private var focusedSlot="ring"
+    private var quickFilter=0
+    private var query=""
     private val gold=0xFFEBC383.toInt()
     private val ivory=0xFFF1EFE9.toInt()
     private val faded=0xFFACBCCC.toInt()
@@ -100,6 +107,26 @@ class InventoryActivity:Activity(){
         top.addView(title,LinearLayout.LayoutParams(0,-2,2f))
         gap(root,8)
         tabs=row(root)
+        search=EditText(this).apply{
+            hint="🔎 Поиск по имени или свойству"
+            setSingleLine(true)
+            inputType=InputType.TYPE_CLASS_TEXT
+            setTextColor(ivory);setHintTextColor(faded)
+            textSize=14f
+            setPadding(dp(13),dp(11),dp(13),dp(11))
+            background=round(0xFF253244.toInt(),0xFF56657B.toInt(),11)
+            addTextChangedListener(object:TextWatcher{
+                override fun beforeTextChanged(s:CharSequence?,start:Int,count:Int,after:Int){}
+                override fun onTextChanged(s:CharSequence?,start:Int,before:Int,count:Int){
+                    query=s?.toString()?.trim()?:""
+                    if(::content.isInitialized && section==0)draw()
+                }
+                override fun afterTextChanged(s:Editable?){}
+            })
+        }
+        root.addView(search,LinearLayout.LayoutParams(-1,-2).apply{
+            topMargin=dp(8)
+        })
         scroll=ScrollView(this)
         content=LinearLayout(this).apply{
             orientation=LinearLayout.VERTICAL;setPadding(0,dp(12),0,dp(18))
@@ -121,6 +148,7 @@ class InventoryActivity:Activity(){
     }
     private fun draw(){
         h=DungeonGame.advance(this)
+        if(::search.isInitialized)search.visibility=if(section==0)View.VISIBLE else View.GONE
         tabs.removeAllViews()
         listOf("▤ РЮКЗАК","⛨ ЭКИПИРОВКА","⚒ МАТЕРИАЛЫ").forEachIndexed{idx,name->
             button(tabs,name,1f,section==idx){select(idx)}
@@ -136,6 +164,19 @@ class InventoryActivity:Activity(){
             gap(this,5)
             add(this,"🔒 "+h.gear.count{EquipmentLogic.isProtected(h,it)}+
                 " защищено   ✦ "+h.newItems.size+" новых",12f,gold,true)
+        }
+        card("БЫСТРЫЙ ОТБОР"){
+            val options=listOf("ВСЕ","НОВЫЕ","ИЗБРАННОЕ","НАДЕТО")
+            val line=row(this)
+            options.forEachIndexed{idx,name->
+                button(line,name,1f,quickFilter==idx){quickFilter=idx;draw()}
+            }
+            if(h.newItems.isNotEmpty()){
+                gap(this,5)
+                button(this,"✓ ОТМЕТИТЬ ВСЁ ПРОСМОТРЕННЫМ"){
+                    change{DungeonGame.markAllViewed(this@InventoryActivity)}
+                }
+            }
         }
         card("ФИЛЬТРЫ И СОРТИРОВКА"){
             val slots=listOf("all","weapon","armor","helmet","gloves","boots","ring","amulet")
@@ -167,7 +208,16 @@ class InventoryActivity:Activity(){
         }
         val items=h.gear.filter{
             (filterSlot=="all"||it.slot==filterSlot) &&
-                (filterRarity==-1||it.rarity==filterRarity)
+                (filterRarity==-1||it.rarity==filterRarity) &&
+                (query.isEmpty()||it.name.contains(query,true)||
+                    it.trait.contains(query,true)||
+                    EquipmentLogic.label(it.slot).contains(query,true)) &&
+                when(quickFilter){
+                    1->it.id in h.newItems
+                    2->it.id in h.favorites
+                    3->it.id in h.equipment.values
+                    else->true
+                }
         }.let{list->when(sortMode){
             1->list.sortedByDescending{EquipmentLogic.weight(it,h.heroClass)}
             2->list.sortedWith(compareBy<Gear>{it.slot}.thenByDescending{it.rarity})
@@ -200,6 +250,7 @@ class InventoryActivity:Activity(){
                         item.id in h.favorites->"🔒 ИЗБР."
                         item.id in h.newItems->"НОВЫЙ"
                         item.set>0->"КОМПЛЕКТ"
+                        EquipmentLogic.recommendation(h,item)>4->"↑ ЛУЧШЕ"
                         else->"★".repeat(item.rarity+1)
                     }
                     add(tile,badge,9f,PixelGearIcon.rarityColor(item.rarity),true).apply{
@@ -306,6 +357,12 @@ class InventoryActivity:Activity(){
             add(this,"Материалы получаются при разборе экипировки."+
                 "\nКристаллы — из боссов, реликвий и заданий.",12f,faded)
         }
+        card("ПОСЛЕДНИЕ НАХОДКИ"){
+            if(h.lootHistory.isEmpty())add(this,"История появится после новых находок.",12f,faded)
+            else h.lootHistory.take(10).forEach{
+                add(this,it,12f,faded);gap(this,5)
+            }
+        }
         card("РЕЦЕПТЫ КУЗНИЦЫ"){
             add(this,"Новый предмет · "+(5+h.forge*2)+" материалов, "+
                 (30+h.forge*12)+" золота",13f,ivory)
@@ -367,6 +424,14 @@ class InventoryActivity:Activity(){
         gap(pane,7)
         add(pane,"СРАВНЕНИЕ С НАДЕТЫМ",13f,gold,true)
         add(pane,"Текущее: "+(current?.name?:"пустой слот"),12f,faded)
+        val score=EquipmentLogic.improvement(h,g,EquipmentLogic.targetSlot(g,second))
+        val suggestion=when{
+            g.id in h.equipment.values->"✓ Сейчас надето"
+            score>4->"↑ РЕКОМЕНДУЕТСЯ НАДЕТЬ"
+            score<0->"↓ Текущая экипировка лучше"
+            else->"≈ Похожая эффективность"
+        }
+        add(pane,suggestion,13f,if(score>4)0xFF86DAA7.toInt() else faded,true)
         fun metric(name:String,value:Int){
             val displayed=if(value>0)"+"+value else ""+value
             val color=when{value>0->0xFF87DCA5.toInt();value<0->0xFFF18F93.toInt();else->faded}
@@ -375,9 +440,15 @@ class InventoryActivity:Activity(){
         metric("⚔ Атака",delta.attack);metric("⛨ Защита",delta.defense)
         metric("♥ HP",delta.health);metric("✦ Крит",delta.crit)
         metric("◇ Уворот",delta.dodge)
+        metric("✚ Регенерация",delta.regeneration)
+        metric("☠ Яд",delta.poison)
         if(delta.setBonus!=0)metric("Комплект",delta.setBonus)
         gap(pane,5)
-        val dialog=AlertDialog.Builder(this).setView(pane)
+        val scrollPane=ScrollView(this).apply{
+            isFillViewport=false
+            addView(pane)
+        }
+        val dialog=AlertDialog.Builder(this).setView(scrollPane)
             .setNegativeButton("ЗАКРЫТЬ",null).create()
         if(g.id!=h.equipment[g.slot])button(pane,"✓ НАДЕТЬ"){
             dialog.dismiss();change{DungeonGame.equip(this,id)}
@@ -402,5 +473,6 @@ class InventoryActivity:Activity(){
             }
         }else add(pane,"✓ ПРЕДМЕТ НАДЕТ",12f,0xFF80D19F.toInt(),true)
         dialog.show()
+        dialog.setOnDismissListener{draw()}
     }
 }
