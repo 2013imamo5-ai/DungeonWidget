@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/widgetRoot"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:padding="10dp"
+    android:background="#E8111822">
+    <TextView android:id="@+id/widgetTitle"
+        android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:text="⚔ ПОДЗЕМЕЛЬЕ"
+        android:textSize="17sp" android:textStyle="bold" android:ellipsize="end"
+        android:textColor="#F0C783" android:maxLines="1"
+        android:paddingBottom="4dp"/>
+    <TextView android:id="@+id/widgetDetail"
+        android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:text="Подземелье"
+        android:textSize="13sp" android:textColor="#B7C8CE"
+        android:ellipsize="end" android:maxLines="2"
+        android:paddingBottom="5dp"/>
+    <ImageView android:id="@+id/widgetScene"
+        android:layout_width="match_parent" android:layout_height="0dp"
+        android:layout_weight="1"
+        android:scaleType="centerCrop"
+        android:adjustViewBounds="false"
+        android:background="#14202B"
+        android:contentDescription="Пиксельное подземелье"/>
+    <TextView android:id="@+id/widgetStatus"
+        android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:text="♥ 40/40  ★ 1  ◉ 0"
+        android:textSize="15sp" android:textColor="#EEE8D8"
+        android:maxLines="2" android:paddingTop="8dp"
+        android:paddingBottom="7dp"/>
+    <LinearLayout android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal">
+        <TextView android:id="@+id/widgetAction"
+            android:layout_width="0dp" android:layout_weight="1"
+            android:layout_height="wrap_content"
+            android:background="#384959"
+            android:gravity="center" android:padding="12dp"
+            android:text="Ⅱ ПАУЗА" android:textSize="14sp"
+            android:textColor="#F0C783" android:textStyle="bold"/>
+        <TextView android:id="@+id/widgetPotion"
+            android:layout_width="0dp" android:layout_weight="1"
+            android:layout_height="wrap_content" android:layout_marginStart="6dp"
+            android:background="#305449"
+            android:gravity="center" android:padding="12dp"
+            android:text="✚ ЗЕЛЬЕ" android:textSize="14sp"
+            android:textColor="#B6E0C8" android:textStyle="bold"/>
+    </LinearLayout>
+</LinearLayout>

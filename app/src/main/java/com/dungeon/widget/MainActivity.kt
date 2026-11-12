@@ -295,6 +295,12 @@ class MainActivity:Activity(){
         if(state.gear.isEmpty()){
             card(body,"ПОКА ПУСТО","Продолжай исследовать подземелье: предметы выпадают из врагов и сундуков.")
         }
+        card(body,"⚒ ОЧИСТКА РЮКЗАКА",
+            "Надетые предметы никогда не разбираются. Если рюкзак заполнен, новая слабая добыча автоматически превращается в материалы."){
+            val quick=row(this)
+            mini(quick,"1–2 ★"){confirmSalvage(1)}
+            mini(quick,"1–3 ★"){confirmSalvage(2)}
+        }
         val sorts=row(body)
         mini(sorts,if(sortMode==0)"✓ РЕДКОСТЬ" else "РЕДКОСТЬ"){sortMode=0;refreshPage()}
         mini(sorts,if(sortMode==1)"✓ СИЛА" else "СИЛА"){sortMode=1;refreshPage()}
@@ -321,6 +327,23 @@ class MainActivity:Activity(){
                 }
             }
         }
+    }
+    private fun confirmSalvage(maxRarity:Int){
+        val items=state.gear.filter{
+            it.rarity<=maxRarity && !state.equipment.values.contains(it.id)
+        }
+        if(items.isEmpty()){
+            Toast.makeText(this,"Подходящих предметов нет",Toast.LENGTH_SHORT).show()
+            return
+        }
+        AlertDialog.Builder(this)
+            .setTitle("Разобрать "+items.size+" предметов?")
+            .setMessage("Будут разобраны только ненадетые предметы до "+
+                (maxRarity+1)+" звёзд включительно. Отменить действие нельзя.")
+            .setPositiveButton("РАЗОБРАТЬ"){_,_->
+                change{DungeonGame.salvageWeak(this@MainActivity,maxRarity)}
+            }
+            .setNegativeButton("Отмена",null).show()
     }
     private fun camp(){
         card(body,"⌂ ЛАГЕРЬ ГЕРОЯ",

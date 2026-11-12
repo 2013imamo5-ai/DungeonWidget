@@ -126,14 +126,16 @@ object DungeonScene {
         val eventAge=if(live) (System.currentTimeMillis()-h.lastTick).coerceIn(0,1050).toInt() else 1000
         val combatRoom=h.roomKind=="battle"||h.roomKind=="boss"
         val battleFinished=h.pathStep>=encounter && h.event in listOf("battle","boss")
-        val impact=battleFinished && h.pathStep==encounter && live && eventAge<930
-        val showEnemy=!combatRoom || !battleFinished || (impact && eventAge<400)
+        val impact=battleFinished && live &&
+            h.pathStep in encounter..(encounter+1)
+        val hitAge=if(h.pathStep==encounter)eventAge else 1050+eventAge
+        val showEnemy=!combatRoom || !battleFinished || (impact && hitAge<420)
         block(c,targetX-15,targetY+29,33f,4f,0x8A0B0E14.toInt())
         when(h.roomKind){
             "boss","battle"->if(showEnemy){
-                val knock=if(impact && eventAge>140) (if(frame%4<2) 4f else -4f) else 0f
+                val knock=if(impact && hitAge>140) (if(frame%4<2) 4f else -4f) else 0f
                 enemy(c,targetX+knock,targetY,h,frame,accent)
-                if(impact && eventAge<270)block(c,targetX-20,targetY-36,40f,56f,0x66FFFFFF)
+                if(impact && hitAge<350)block(c,targetX-20,targetY-36,40f,56f,0x66FFFFFF)
             }
             "chest"->chest(c,targetX,targetY,frame,h.pathStep>=encounter)
             "shrine"->shrine(c,targetX,targetY,frame)
@@ -173,12 +175,16 @@ object DungeonScene {
             dot(c,px+28f,py-23f,accent,3f)
         }
         if(impact){
-            val elapsed=eventAge.coerceAtLeast(1)
-            val raise=(elapsed/18f).coerceAtMost(30f)
-            if(elapsed<780){
-                val number=if("КРИТ" in h.log) "КРИТ -"+h.lastDamage else "-"+h.lastDamage
-                txt(c,number,targetX-24f,targetY-44f-raise,if("КРИТ" in h.log)13f else 12f,
-                    if("КРИТ" in h.log)0xFFFFCD61.toInt() else 0xFFFF8B76.toInt())
+            val elapsed=hitAge.coerceAtLeast(1)
+            val raise=(elapsed/30f).coerceAtMost(30f)
+            if(elapsed<1650){
+                val critical="КРИТ" in h.log
+                val number=if(critical)"КРИТ -"+h.lastDamage else "-"+h.lastDamage
+                val textX=targetX-(if(critical)33f else 19f)
+                txt(c,number,textX+1f,targetY-39f-raise+1f,if(critical)14f else 15f,
+                    0xFF131B26.toInt())
+                txt(c,number,textX,targetY-39f-raise,if(critical)14f else 15f,
+                    if(critical)0xFFFFCF69.toInt() else 0xFFFF8D79.toInt())
             }
             for(i in 0 until 12){
                 val drift=(elapsed/65f).coerceAtMost(14f)
@@ -187,7 +193,7 @@ object DungeonScene {
                 val col=if(i%3==0)0xFFFFE5AF.toInt() else if(i%3==1)0xFFDC7773.toInt() else accent
                 dot(c,targetX+dx,targetY-17f+dy,col,if(i%2==0)3f else 2f)
             }
-            if(elapsed in 30..300){
+            if(elapsed in 30..430){
                 val length=28f+(elapsed/20f)
                 block(c,targetX-23f,targetY-29f,length,3f,0xFFF3E8D9.toInt())
                 block(c,targetX-18f,targetY-37f,3f,30f,0xFFFCE2AB.toInt())

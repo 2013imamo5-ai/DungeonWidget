@@ -232,6 +232,19 @@ object DungeonGame{
             h.log="Разобрано: "+item.name+" · материалы +"+(1+item.rarity*2);true
         }
     }
+    fun salvageWeak(ctx:Context,maxRarity:Int)=mutate(ctx){h->
+        val unwanted=h.gear.filter{
+            it.rarity<=maxRarity && !h.equipment.values.contains(it.id)
+        }
+        if(unwanted.isEmpty())false else{
+            val removed=unwanted.map{it.id}.toSet()
+            h.gear.removeAll{it.id in removed}
+            h.shards+=unwanted.sumOf{1+it.rarity*2}
+            h.log="Разобрано "+unwanted.size+" предметов. Материалы: +"+
+                unwanted.sumOf{1+it.rarity*2}
+            true
+        }
+    }
     fun improveWeapon(ctx:Context)=mutate(ctx){h->
         val item=h.weaponItem
         val cost=20+h.level*3
@@ -308,8 +321,16 @@ object DungeonGame{
     private fun collect(h:HeroState,item:Gear){
         if(h.autoSalvage&&item.rarity<=1){h.shards+=1+item.rarity*2;return}
         if(h.gear.size>=42){
-            val discard=h.gear.filterNot{h.equipment.values.contains(it.id)}.minByOrNull{it.rarity*100+it.power}
-            if(discard!=null){h.gear.remove(discard);h.shards+=1+discard.rarity*2}else{return}
+            val discard=h.gear.filterNot{h.equipment.values.contains(it.id)}
+                .minByOrNull{it.rarity*100+it.power}
+            val newScore=item.rarity*100+item.power
+            val oldScore=discard?.let{it.rarity*100+it.power} ?: Int.MAX_VALUE
+            if(discard==null||newScore<=oldScore){
+                h.shards+=1+item.rarity*2
+                return
+            }
+            h.gear.remove(discard)
+            h.shards+=1+discard.rarity*2
         }
         h.gear.add(item)
         if(h.equipment[item.slot]==null){h.equipment[item.slot]=item.id}
