@@ -37,6 +37,8 @@ class MainActivity:Activity(){
     private var sortMode=0
     private var frame=0
     private var lastUpdate=0L
+    private var lastNumbers=0L
+    private val dungeonMotion=DungeonMotion()
     private var lastWidgetRefresh=0L
     private var lastPageRefresh=0L
     private var state=HeroState()
@@ -108,31 +110,40 @@ class MainActivity:Activity(){
         override fun run(){
             if(!running||isFinishing)return
             val now=System.currentTimeMillis()
-            if(now-lastUpdate>=950L){
+            // Frequent reads keep the rendered position aligned with 1,050ms
+            // simulation ticks. Previously a 950ms poll could leave the hero
+            // stalled and then make him jump nearly one entire tile.
+            if(now-lastUpdate>=180L){
                 val beforeFloor=state.floor
                 val beforeRoom=state.room
                 state=DungeonGame.advance(this@MainActivity)
-                if(beforeFloor!=state.floor||beforeRoom!=state.room)roomEnteredAt=now
+                if(beforeFloor!=state.floor||beforeRoom!=state.room){
+                    roomEnteredAt=now
+                    dungeonMotion.reset()
+                }
                 lastUpdate=now
-                updateNumbers()
+                if(now-lastNumbers>=540L){
+                    updateNumbers()
+                    lastNumbers=now
+                }
                 if(now-lastPageRefresh>=9000L)refreshPage()
             }
             val age=(now-roomEnteredAt).coerceAtLeast(0).coerceAtMost(2000).toInt()
             if(fullscreenDialog?.isShowing==true){
                 fullscreenView?.setImageDrawable(BitmapDrawable(resources,
-                    DungeonScene.render(state,frame++,true,1.16f,age,true)).apply{isFilterBitmap=false})
+                    DungeonScene.render(state,frame++,true,1.16f,age,true,dungeonMotion)).apply{isFilterBitmap=false})
                 fullscreenLabel?.text="♥ "+state.hp+"/"+state.maxHp+
                     "   Уровень "+state.level+"   ·   Этаж "+state.floor+
                     "\n"+state.log
             }else if(page==0){
                 scene.setImageDrawable(BitmapDrawable(resources,
-                    DungeonScene.render(state,frame++,true,1.06f,age,true)).apply{isFilterBitmap=false})
+                    DungeonScene.render(state,frame++,true,1.06f,age,true,dungeonMotion)).apply{isFilterBitmap=false})
             }
             if(now-lastWidgetRefresh>=12000L){
                 DungeonWidgetProvider.refreshAll(this@MainActivity)
                 lastWidgetRefresh=now
             }
-            handler.postDelayed(this,if(state.eco)280L else 90L)
+            handler.postDelayed(this,if(state.eco)240L else 50L)
         }
     }
     override fun onCreate(savedInstanceState:Bundle?){
@@ -180,7 +191,9 @@ class MainActivity:Activity(){
     }
     override fun onResume(){
         super.onResume();running=true;state=DungeonGame.advance(this)
-        lastUpdate=0L;handler.removeCallbacks(animator);handler.post(animator)
+        dungeonMotion.reset()
+        lastUpdate=0L;lastNumbers=0L
+        handler.removeCallbacks(animator);handler.post(animator)
     }
     override fun onPause(){
         running=false;handler.removeCallbacks(animator);super.onPause()

@@ -27,7 +27,8 @@ object DungeonScene {
         p.color=col;p.textSize=size;p.typeface=Typeface.create("monospace",Typeface.BOLD)
         p.isAntiAlias=false;c.drawText(s,x,y,p)
     }
-    fun render(h:HeroState,frame:Int=0,live:Boolean=false,zoom:Float=1f,transitionAge:Int=1000,cleanHud:Boolean=false):Bitmap{
+    fun render(h:HeroState,frame:Int=0,live:Boolean=false,zoom:Float=1f,
+        transitionAge:Int=1000,cleanHud:Boolean=false,motion:DungeonMotion?=null):Bitmap{
         val b=Bitmap.createBitmap(W,H,Bitmap.Config.ARGB_8888)
         val c=Canvas(b)
         val biome=h.biomeId
@@ -41,7 +42,9 @@ object DungeonScene {
             txt(c,"R"+h.room+"/8",273f,12f,10f,0xFFE1DCC9.toInt())
         }
         val layout=DungeonMap.get(h.floor,h.room)
+        val now=System.currentTimeMillis()
         DungeonTerrain.draw(c,layout,biome,floorColor,wallColor)
+        DungeonAtmosphere.draw(c,layout,biome,now,live)
         // A hidden side-chamber appears in some rooms.
         layout.secret?.let{secret->
             val sx=secret.x*16f+5f;val sy=secret.y*16f+19f
@@ -127,18 +130,31 @@ object DungeonScene {
             txt(c,"!",targetX-3f,targetY-48f,15f,0xFFFF7F72.toInt())
             block(c,targetX-16f,targetY+32f,32f,3f,0xFFC44E44.toInt())
         }
-        // The hero moves along a BFS-computed route, including turns and detours.
-        val ratio=if(live&&!h.paused) ((System.currentTimeMillis()-h.lastTick).coerceIn(0,DungeonGame.stepMillis()).toFloat()/DungeonGame.stepMillis()) else 0f
+        // Actual motion follows the saved BFS path, but the pose is updated
+        // independently of the combat/simulation tick. Do NOT tween through
+        // an enemy while the pathStep is frozen during multiple battle rounds.
         val index=h.pathStep.coerceIn(0,layout.path.lastIndex)
         val current=layout.path[index]
         val next=layout.path[(index+1).coerceAtMost(layout.path.lastIndex)]
-        val px=(current.x+(next.x-current.x)*ratio)*16f+8f
-        val py=17f+(current.y+(next.y-current.y)*ratio)*16f+5f
-        val walking=live&&!h.paused && h.recovery==0
-        if(walking&&frame%4==0){
-            dot(c,px-12f,py+14f,0xFF8D9297.toInt(),3f)
-            dot(c,px+10f,py+12f,0xFF5C6A75.toInt(),2f)
+        val combatStop=combatRoom && h.pathStep>=encounter && h.enemyHp>0
+        val stunned=h.effectType=="stun" && h.effectTicks>0
+        val walking=live && !h.paused && h.recovery==0 &&
+            !combatStop && !stunned &&
+            index<layout.path.lastIndex
+        val elapsed=(now-h.lastTick).coerceIn(0L,DungeonGame.stepMillis())
+        val progress=if(walking)elapsed.toFloat()/DungeonGame.stepMillis() else 0f
+        val desiredX=(current.x+(next.x-current.x)*progress)*16f+8f
+        val desiredY=17f+(current.y+(next.y-current.y)*progress)*16f+5f
+        val position=if(live && motion!=null){
+            motion.sample(h.floor,h.room,desiredX,desiredY,now)
+        }else Pair(desiredX,desiredY)
+        val px=position.first
+        val py=position.second
+        if(walking && frame%5==0){
+            dot(c,px-8f,py+11f,0xFF8D9297.toInt(),2f)
+            dot(c,px+7f,py+13f,0xFF5C6A75.toInt(),2f)
         }
+        DungeonAtmosphere.heroShadow(c,px,py,now,walking)
         // Sprite proportions should not swallow a one-cell-wide corridor.
         c.save()
         c.scale(0.78f,0.78f,px,py)
@@ -315,8 +331,10 @@ object DungeonScene {
         val gloveCol=gearColor(gloves?.rarity?:-1,0xFF8F775F.toInt())
         val bootCol=gearColor(boots?.rarity?:-1,
             if(cl==1)0xFF4A6756.toInt() else 0xFF414C62.toInt())
-        val bob=if(walk&&frame%6<3)1f else 0f
-        val leg=if(walk&&frame%8<4)3f else -2f
+        // Continuous stride phase replaces the abrupt 5-pixel leg flip.
+        val stride=if(walk)sin(System.currentTimeMillis()/165.0).toFloat() else 0f
+        val bob=if(walk)kotlin.math.abs(stride)*0.65f else 0f
+        val leg=stride*1.8f
         block(c,x-14f,y+10f,28f,4f,0xAA0B0C10.toInt())
         if(chest!=null){
             block(c,x-13f,y-17f+bob,26f,27f,0xFF302837.toInt())
@@ -344,8 +362,9 @@ object DungeonScene {
         block(c,x-8f,y-26f+bob,16f,8f,0xFFDDE3DE.toInt())
         block(c,x-7f,y-21f+bob,14f,4f,0xFF1B2636.toInt())
         dot(c,x-2f,y-21f+bob,accent,3f)
-        block(c,x-18f,y-10f+bob,7f,19f,gloveCol)
-        block(c,x-16f,y-7f+bob,6f,12f,bright(gloveCol,22))
+        val armSwing=if(walk)stride*1.1f else 0f
+        block(c,x-18f,y-10f+bob+armSwing,7f,19f,gloveCol)
+        block(c,x-16f,y-7f+bob+armSwing,6f,12f,bright(gloveCol,22))
         if(gloves!=null)block(c,x-19f,y+3f+bob,9f,6f,gloveCol)
         if(amulet!=null){
             block(c,x-2f,y-12f+bob,5f,7f,
@@ -463,7 +482,7 @@ object DungeonScene {
             return
         }
         val bigger=if(boss)5f else 0f
-        val wob=if(frame%12<6)0f else 2f
+        val wob=sin(System.currentTimeMillis()/230.0).toFloat()*1.4f
         val body=when(h.biomeId){
             0->0xFFD9D4BB.toInt();1->0xFF84BF98.toInt()
             2->0xFFCB6D63.toInt();else->0xFFA6D7EB.toInt()

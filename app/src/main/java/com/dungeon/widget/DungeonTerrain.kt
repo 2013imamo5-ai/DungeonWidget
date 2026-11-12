@@ -58,6 +58,28 @@ object DungeonTerrain {
                 if(!left)rect(c,px,py,3f,16f,shadow)
                 if(!right)rect(c,px+13f,py,3f,16f,shadow)
                 if(noise==4)rect(c,px+11f,py+10f,2f,2f,lighter(base,24))
+                // Cracked flagstones, moss, ash and frost stay within walkable cells.
+                if(noise==2 || noise==9){
+                    rect(c,px+5f,py+3f,2f,2f,darker(base,26))
+                    rect(c,px+7f,py+5f,1f,4f,darker(base,29))
+                    rect(c,px+8f,py+8f,4f,1f,darker(base,27))
+                }
+                if(noise==6 || noise==14){
+                    val fleck=when(biome){
+                        1->0xFF487A59.toInt()
+                        2->0xFF915442.toInt()
+                        3->0xFF8BB8CD.toInt()
+                        else->0xFF757184.toInt()
+                    }
+                    rect(c,px+3f,py+12f,4f,2f,fleck)
+                    rect(c,px+7f,py+10f,2f,2f,fleck)
+                }
+                if(degree>=3&&noise==10){
+                    // Fine inlaid floor symbol on an intersection.
+                    rect(c,px+6f,py+4f,4f,1f,lighter(base,31))
+                    rect(c,px+7f,py+5f,2f,6f,lighter(base,19))
+                    rect(c,px+6f,py+10f,4f,1f,lighter(base,31))
+                }
             }else{
                 val edge=up||down||left||right
                 rect(c,px,py,16f,16f,if(edge)darker(wall,2)else darker(wall,32))
@@ -66,6 +88,23 @@ object DungeonTerrain {
                     rect(c,px+1f,py+1f,14f,3f,lighter(wall,22))
                     rect(c,px+1f,py+5f,14f,10f,darker(wall,8))
                     if((x+y)%2==0)rect(c,px+8f,py+6f,1f,8f,darker(wall,27))
+                    // Offset stone joints make the wall feel built, not tiled.
+                    if((x+y)%3==0){
+                        rect(c,px+2f,py+8f,12f,1f,darker(wall,22))
+                        rect(c,px+5f,py+9f,1f,5f,darker(wall,31))
+                    }else{
+                        rect(c,px+2f,py+11f,11f,1f,darker(wall,23))
+                    }
+                    if(noise==12){
+                        val moss=when(biome){
+                            1->0xFF365B44.toInt()
+                            2->0xFF67403A.toInt()
+                            3->0xFF4C7B97.toInt()
+                            else->0xFF53505D.toInt()
+                        }
+                        rect(c,px+11f,py+5f,3f,5f,moss)
+                        rect(c,px+9f,py+6f,2f,2f,moss)
+                    }
                     if(down){
                         rect(c,px,py+13f,16f,3f,lip)
                         rect(c,px,py+10f,16f,3f,darker(wall,20))
