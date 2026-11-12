@@ -37,10 +37,10 @@ jobs:
       - name: Build permanently signed APK
         run: |
           gradle --no-daemon :app:assembleRelease
-          cp app/build/outputs/apk/release/app-release.apk DungeonWidget-v0.7.1.apk
+          cp app/build/outputs/apk/release/app-release.apk DungeonWidget-v0.8.0.apk
       - name: Publish direct APK
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release view v0.7.1 >/dev/null 2>&1 && gh release delete v0.7.1 --yes || true
-          gh release create v0.7.1 DungeonWidget-v0.7.1.apk --title "Dungeon Widget v0.7.1" --notes "Camera framing fix: hero scaled down in standard and fullscreen dungeon views, larger readable minimap, duplicate floor/health captions removed from the image. Progress and signing preserved."
+          gh release view v0.8.0 >/dev/null 2>&1 && gh release delete v0.8.0 --yes || true
+          gh release create v0.8.0 DungeonWidget-v0.8.0.apk --title "Dungeon Widget v0.8.0" --notes "New corridor art: solid masonry walls, brighter floor paths, shadowed boundaries, stone arches, room decoration anchored to walkable map, smaller hero and enemies. Minimap and world use exactly the same terrain grid; saves and signing preserved."

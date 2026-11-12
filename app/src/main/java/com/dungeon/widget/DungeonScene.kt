@@ -19,15 +19,6 @@ object DungeonScene {
     private val floors=intArrayOf(0xFF343949.toInt(),0xFF283E36.toInt(),0xFF42302E.toInt(),0xFF2D4051.toInt())
     private val walls=intArrayOf(0xFF171E2B.toInt(),0xFF172921.toInt(),0xFF2B1D1C.toInt(),0xFF152333.toInt())
     private val accents=intArrayOf(0xFFF0AF57.toInt(),0xFF89D49B.toInt(),0xFFF08455.toInt(),0xFF83D8F0.toInt())
-    private fun cellOpen(x:Int,y:Int):Boolean{
-        if(x !in 1..18||y !in 1..9)return false
-        return (y in 4..6 && x in 1..18) ||
-            (x in 3..5 && y in 2..8) ||
-            (x in 10..12 && y in 2..8) ||
-            (x in 15..17 && y in 2..9) ||
-            (y in 2..3 && x in 3..17) ||
-            (y in 7..8 && x in 3..17)
-    }
     private fun block(c:Canvas,x:Float,y:Float,w:Float,h:Float,col:Int){
         p.color=col;p.style=Paint.Style.FILL;c.drawRect(x,y,x+w,y+h,p)
     }
@@ -50,74 +41,20 @@ object DungeonScene {
             txt(c,"R"+h.room+"/8",273f,12f,10f,0xFFE1DCC9.toInt())
         }
         val layout=DungeonMap.get(h.floor,h.room)
-        val roomSeed=layout.seed
-        for(y in 0 until 11)for(x in 0 until 20){
-            val xx=x*16f;val yy=y*16f+17
-            val open=layout.isFloor(x,y)
-            val noise=(x*37+y*79+roomSeed)%11
-            if(open){
-                block(c,xx,yy,16f,16f,if(noise>6)bright(floorColor,9)else floorColor)
-                block(c,xx,yy,15f,1f,0x44000000)
-                block(c,xx,yy,1f,16f,0x33000000)
-                if(noise==3)dot(c,xx+5,yy+9,bright(floorColor,24),2f)
-                if(noise==6){dot(c,xx+2,yy+3,bright(floorColor,16));dot(c,xx+11,yy+12,0xFF202630.toInt())}
-            }else{
-                block(c,xx,yy,16f,16f,wallColor)
-                if(x in 1..18 && y in 1..9){
-                    block(c,xx+1f,yy+1f,14f,4f,bright(wallColor,25))
-                    block(c,xx+1f,yy+6f,14f,9f,bright(wallColor,9))
-                    if(noise%3==0)block(c,xx+8f,yy+7f,1f,7f,wallColor)
-                }
-            }
-        }
-        // Doors are part of the traversable route.
-        block(c,16f,97f,5f,29f,0xFF9B714C.toInt())
-        block(c,18f,102f,3f,18f,0xFFD5A669.toInt())
-        block(c,291f,136f,12f,23f,0xFF8B654D.toInt())
-        block(c,294f,139f,6f,16f,0xFFD9B377.toInt())
-        // Decorations vary with the biome.
-        for(i in 0..3){
-            val x=52f+i*64
-            val y=34f+(i%2)*92
-            when(biome){
-                0->{
-                    block(c,x-3,y,6f,13f,0xFF857E8D.toInt())
-                    block(c,x-6,y-5,12f,7f,0xFFFFAF43.toInt())
-                    block(c,x-2,y-8,4f,11f,0xFFFFE39A.toInt())
-                }
-                1->{
-                    block(c,x-2,y+4,4f,12f,0xFFB9A79A.toInt())
-                    block(c,x-9,y-3,18f,10f,0xFFB66694.toInt())
-                    dot(c,x-4,y-1,0xFFFFD8EA.toInt())
-                    dot(c,x+4,y+1,0xFFFFD8EA.toInt())
-                }
-                2->{
-                    block(c,x-4,y,8f,18f,0xFF4D292A.toInt())
-                    block(c,x-7,y-6,14f,10f,0xFFEF713B.toInt())
-                    block(c,x-3,y-10,6f,8f,0xFFFFB45E.toInt())
-                }
-                else->{
-                    block(c,x-5,y-6,10f,24f,0xFF4D91B6.toInt())
-                    block(c,x-2,y-11,5f,6f,0xFFB2EFFF.toInt())
-                    block(c,x+4,y+6,3f,6f,0xFF9ED8F7.toInt())
-                }
-            }
-        }
-        // Side room furniture, rugs, and banners.
-        block(c,104f,57f,30f,15f,if(biome==2)0xFF8C4B40.toInt() else 0xFF5C455F.toInt())
-        block(c,109f,57f,21f,15f,if(biome==2)0xFFC47A5A.toInt() else 0xFF866A83.toInt())
-        block(c,39f,57f,10f,16f,0xFF514A4D.toInt())
-        block(c,40f,53f,8f,5f,0xFF8E8679.toInt())
+        DungeonTerrain.draw(c,layout,biome,floorColor,wallColor)
         // A hidden side-chamber appears in some rooms.
         layout.secret?.let{secret->
             val sx=secret.x*16f+5f;val sy=secret.y*16f+19f
             block(c,sx,sy,8f,7f,0xFF9C7F45.toInt())
             dot(c,sx+2f,sy+2f,0xFFF5D58A.toInt())
         }
-        // A map of eight chambers.
-        block(c,226f,19f,86f,25f,0xD00B121C.toInt())
-        for(i in 0 until 8)block(c,234f+i*9f,26f,6f,8f,
-            if(i<h.room-1)0xFF6EB38C.toInt() else if(i==h.room-1)accent else 0xFF3C4655.toInt())
+        // On the home-screen widget show chamber progress; the app already
+        // has a dedicated HUD, so don't hide the actual corridor with a label.
+        if(!cleanHud){
+            block(c,226f,19f,86f,25f,0xD00B121C.toInt())
+            for(i in 0 until 8)block(c,234f+i*9f,26f,6f,8f,
+                if(i<h.room-1)0xFF6EB38C.toInt() else if(i==h.room-1)accent else 0xFF3C4655.toInt())
+        }
         // Ground shadow of interactive object.
         val secretIndex=layout.secret?.let{layout.path.indexOf(it)}?:-1
         val encounter=if(h.roomKind=="secret"&&secretIndex>0)secretIndex
@@ -145,7 +82,11 @@ object DungeonScene {
                             if(i%2==0)0xFFFFD875.toInt() else 0xFFA5F5FF.toInt(),3f)
                     }
                 }
+                c.save()
+                c.scale(if(h.roomKind=="boss")0.89f else 0.80f,
+                    if(h.roomKind=="boss")0.89f else 0.80f,targetX,targetY)
                 enemy(c,targetX+knock,targetY,h,frame,accent)
+                c.restore()
                 if(h.elite)txt(c,"ELITE",targetX-20f,targetY-58f,10f,
                     0xFFF6CD6D.toInt())
                 if(h.roomKind=="boss"&&h.bossPhase>0){
@@ -198,7 +139,11 @@ object DungeonScene {
             dot(c,px-12f,py+14f,0xFF8D9297.toInt(),3f)
             dot(c,px+10f,py+12f,0xFF5C6A75.toInt(),2f)
         }
+        // Sprite proportions should not swallow a one-cell-wide corridor.
+        c.save()
+        c.scale(0.78f,0.78f,px,py)
         hero(c,px,py,walking,frame,h,accent,h.event=="camp")
+        c.restore()
         if(walking && h.pathStep in (encounter-2)..encounter && combatRoom){
             if(impact)weaponFx(c,px,py,targetX,targetY,h,frame,accent)
             else{
