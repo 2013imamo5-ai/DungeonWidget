@@ -120,13 +120,13 @@ class MainActivity:Activity(){
             val age=(now-roomEnteredAt).coerceAtLeast(0).coerceAtMost(2000).toInt()
             if(fullscreenDialog?.isShowing==true){
                 fullscreenView?.setImageDrawable(BitmapDrawable(resources,
-                    DungeonScene.render(state,frame++,true,1.58f,age)).apply{isFilterBitmap=false})
+                    DungeonScene.render(state,frame++,true,1.16f,age,true)).apply{isFilterBitmap=false})
                 fullscreenLabel?.text="♥ "+state.hp+"/"+state.maxHp+
                     "   Уровень "+state.level+"   ·   Этаж "+state.floor+
                     "\n"+state.log
             }else if(page==0){
                 scene.setImageDrawable(BitmapDrawable(resources,
-                    DungeonScene.render(state,frame++,true,1.32f,age)).apply{isFilterBitmap=false})
+                    DungeonScene.render(state,frame++,true,1.06f,age,true)).apply{isFilterBitmap=false})
             }
             if(now-lastWidgetRefresh>=12000L){
                 DungeonWidgetProvider.refreshAll(this@MainActivity)
