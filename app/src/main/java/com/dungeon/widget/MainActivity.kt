@@ -222,9 +222,12 @@ class MainActivity:Activity(){
         headline.text="ЭТАЖ "+state.floor+"   ·   "+state.biome
         val hearts=if(state.hp*100/maxOf(1,state.maxHp)<30)"🩸" else "♥"
         vitality.text=hearts+" "+state.hp+"/"+state.maxHp+"    ✦ "+state.level+"    ◈ "+state.gems+"    ◉ "+state.gold
+        val battle=if(state.enemyHp>0){
+            "  ·  ⚔ "+state.enemy+" "+state.enemyHp+"/"+state.enemyMaxHp+" HP"
+        }else ""
         narration.text=state.log+"\nКОМНАТА "+state.room+"/8  ·  "+state.className+
             (if(state.paused)"  ·  ПАУЗА" else "")+
-            (if(state.effectTicks>0)"  ·  "+state.status else "")
+            (if(state.effectTicks>0)"  ·  "+state.status else "")+battle
     }
     private fun buildTabs(){
         tabs.removeAllViews()
@@ -273,7 +276,7 @@ class MainActivity:Activity(){
             }
         }
         card(body,"⚔ АВТОМАТИЧЕСКАЯ ЭКСПЕДИЦИЯ",
-            "Герой сам выбирает путь, открывает сундуки и сражается. Коснись сцены выше, чтобы открыть увеличенный режим. При гибели экипировка сохраняется."){
+            "Герой исследует подземелье и проводит несколько ходов в бою. Оружие, броня, шлем, перчатки и сапоги меняют его облик. Коснись сцены для увеличения."){
             action(this,if(state.paused)"▶ ПРОДОЛЖИТЬ ИССЛЕДОВАНИЕ" else "Ⅱ ПАУЗА"){change{DungeonGame.toggle(this@MainActivity)}}
             action(this,"✚ Использовать зелье · осталось "+state.potions,state.potions>0&&state.hp<state.maxHp){
                 change{DungeonGame.usePotion(this@MainActivity)}

@@ -52,8 +52,11 @@ class DungeonWidgetProvider:AppWidgetProvider(){
             val title="⚔ ПОДЗЕМЕЛЬЕ   F"+h.floor+" · "+h.room+"/8"
             views.setTextViewText(R.id.widgetTitle,if(tiny)"⚔ ЭТАЖ "+h.floor else title)
             views.setTextViewText(R.id.widgetStatus,"♥ "+h.hp+"/"+h.maxHp+"   ★ "+h.level+"   ◉ "+h.gold+"   🧪 "+h.potions)
+            val combatInfo=if(h.enemyHp>0) "⚔ "+h.enemy+" "+h.enemyHp+"/"+h.enemyMaxHp
+                else h.log
             views.setTextViewText(R.id.widgetDetail,
-                if(large) h.biome+"  ·  "+h.log else h.biome+"   ·   "+h.className)
+                if(large) h.biome+" · "+combatInfo
+                else if(h.enemyHp>0)combatInfo else h.biome+" · "+h.className)
             views.setViewVisibility(R.id.widgetDetail,if(tiny)View.GONE else View.VISIBLE)
             views.setViewVisibility(R.id.widgetPotion,if(tiny)View.GONE else View.VISIBLE)
             views.setTextViewTextSize(R.id.widgetTitle,android.util.TypedValue.COMPLEX_UNIT_SP,

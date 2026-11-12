@@ -125,17 +125,32 @@ object DungeonScene {
         val targetY=17f+target.y*16f+5f
         val eventAge=if(live) (System.currentTimeMillis()-h.lastTick).coerceIn(0,1050).toInt() else 1000
         val combatRoom=h.roomKind=="battle"||h.roomKind=="boss"
-        val battleFinished=h.pathStep>=encounter && h.event in listOf("battle","boss")
-        val impact=battleFinished && live &&
+        val fighting=combatRoom&&h.enemyMaxHp>0&&h.pathStep>=encounter
+        val victory=fighting&&h.enemyHp<=0
+        val impact=fighting&&live&&h.lastDamage>0&&
             h.pathStep in encounter..(encounter+1)
         val hitAge=if(h.pathStep==encounter)eventAge else 1050+eventAge
-        val showEnemy=!combatRoom || !battleFinished || (impact && hitAge<420)
+        val showEnemy=!combatRoom||h.enemyHp>0||(victory&&impact&&hitAge<420)
         block(c,targetX-15,targetY+29,33f,4f,0x8A0B0E14.toInt())
         when(h.roomKind){
             "boss","battle"->if(showEnemy){
                 val knock=if(impact && hitAge>140) (if(frame%4<2) 4f else -4f) else 0f
                 enemy(c,targetX+knock,targetY,h,frame,accent)
                 if(impact && hitAge<350)block(c,targetX-20,targetY-36,40f,56f,0x66FFFFFF)
+                if(h.enemyMaxHp>0){
+                    block(c,targetX-26f,targetY-48f,52f,5f,0xFF431E30.toInt())
+                    block(c,targetX-25f,targetY-47f,
+                        50f*h.enemyHp.coerceAtLeast(0)/h.enemyMaxHp.coerceAtLeast(1),3f,
+                        if(h.roomKind=="boss")0xFFF1A15D.toInt() else 0xFFB4D984.toInt())
+                }
+                if(h.enemyWarning){
+                    for(i in 0..3){
+                        val dx=if(i%2==0)-21f else 18f
+                        val dy=-28f+i*11f
+                        dot(c,targetX+dx,targetY+dy,0xFFFF594A.toInt(),5f)
+                    }
+                    txt(c,"!",targetX-4f,targetY-56f,16f,0xFFFF624E.toInt())
+                }
             }
             "chest"->chest(c,targetX,targetY,frame,h.pathStep>=encounter)
             "shrine"->shrine(c,targetX,targetY,frame)
@@ -167,18 +182,26 @@ object DungeonScene {
             dot(c,px-12f,py+14f,0xFF8D9297.toInt(),3f)
             dot(c,px+10f,py+12f,0xFF5C6A75.toInt(),2f)
         }
-        hero(c,px,py,walking,frame,h.heroClass,accent,h.event=="camp")
+        hero(c,px,py,walking,frame,h,accent,h.event=="camp")
         if(walking && h.pathStep in (encounter-2)..encounter && combatRoom){
-            val blade=if(frame%4<2)0xFFFBE1AC.toInt() else 0xFFE8F8FF.toInt()
-            block(c,px+11f,py-17f,17f,3f,blade)
-            block(c,px+26f,py-20f,3f,12f,blade)
-            dot(c,px+28f,py-23f,accent,3f)
+            if(impact)weaponFx(c,px,py,targetX,targetY,h,frame,accent)
+            else{
+                dot(c,px+18f,py-16f,accent,3f)
+                dot(c,targetX-18f,targetY-23f,accent,2f)
+            }
+        }
+        if(impact && h.incomingDamage>0 && hitAge<750){
+            txt(c,"-"+h.incomingDamage,px-15f,py-43f-hitAge/35f,13f,
+                0xFFFF7380.toInt())
+        }
+        if(impact && h.lastDodge && hitAge<730){
+            txt(c,"MISS",px-20f,py-43f-hitAge/33f,12f,0xFF9FE6E2.toInt())
         }
         if(impact){
             val elapsed=hitAge.coerceAtLeast(1)
             val raise=(elapsed/30f).coerceAtMost(30f)
             if(elapsed<1650){
-                val critical="КРИТ" in h.log
+                val critical=h.lastCritical
                 val number=if(critical)"КРИТ -"+h.lastDamage else "-"+h.lastDamage
                 val textX=targetX-(if(critical)33f else 19f)
                 txt(c,number,textX+1f,targetY-39f-raise+1f,if(critical)14f else 15f,
@@ -198,6 +221,16 @@ object DungeonScene {
                 block(c,targetX-23f,targetY-29f,length,3f,0xFFF3E8D9.toInt())
                 block(c,targetX-18f,targetY-37f,3f,30f,0xFFFCE2AB.toInt())
             }
+        }
+        if(h.effectTicks>0 && live){
+            val color=when(h.effectType){
+                "poison"->0xFF78D97D.toInt()
+                "burn"->0xFFFFA45A.toInt()
+                "bleed"->0xFFF08B8E.toInt()
+                else->0xFFA6B8EE.toInt()
+            }
+            dot(c,px-9f,py-35f-(frame%3)*3f,color,4f)
+            dot(c,px+7f,py-32f-(frame%4)*2f,color,3f)
         }
         if(h.event=="level"||h.event=="relic"){
             val sparkleX=px+((frame%5)*3)-6
@@ -234,35 +267,143 @@ object DungeonScene {
     }
     private fun bright(c:Int,a:Int)=Color.rgb(
         min(255,Color.red(c)+a),min(255,Color.green(c)+a),min(255,Color.blue(c)+a))
-    private fun hero(c:Canvas,x:Float,y:Float,walk:Boolean,frame:Int,cl:Int,accent:Int,camp:Boolean){
+    private fun gearColor(rarity:Int,base:Int):Int{
+        val palette=intArrayOf(
+            0xFF9AA9B8.toInt(),0xFF6FAB9A.toInt(),0xFF669CCF.toInt(),
+            0xFFAF79D9.toInt(),0xFFE4B65F.toInt()
+        )
+        return if(rarity>=0)palette[rarity.coerceIn(0,4)] else base
+    }
+    // Equipment-driven sprite: helm, chest, sleeves, gloves, boots and weapon
+    // change in real-time when inventory equipment changes.
+    private fun hero(c:Canvas,x:Float,y:Float,walk:Boolean,frame:Int,
+        h:HeroState,accent:Int,camp:Boolean){
+        val cl=h.heroClass
+        val helmet=h.gear.firstOrNull{it.id==h.equipment["helmet"]}
+        val chest=h.armorItem
+        val gloves=h.gear.firstOrNull{it.id==h.equipment["gloves"]}
+        val boots=h.gear.firstOrNull{it.id==h.equipment["boots"]}
+        val amulet=h.gear.firstOrNull{it.id==h.equipment["amulet"]}
+        val ring=h.gear.firstOrNull{it.id==h.equipment["ring"]||
+            it.id==h.equipment["ring2"]}
+        val chestCol=gearColor(chest?.rarity?:-1,when(cl){
+            1->0xFF587B63.toInt();2->0xFF6B567E.toInt();else->0xFF748DA1.toInt()})
+        val helmCol=gearColor(helmet?.rarity?:-1,when(cl){
+            1->0xFF4B6655.toInt();2->0xFF5F5579.toInt();else->0xFF8E9EAC.toInt()})
+        val gloveCol=gearColor(gloves?.rarity?:-1,0xFF8F775F.toInt())
+        val bootCol=gearColor(boots?.rarity?:-1,
+            if(cl==1)0xFF4A6756.toInt() else 0xFF414C62.toInt())
         val bob=if(walk&&frame%6<3)1f else 0f
         val leg=if(walk&&frame%8<4)3f else -2f
-        block(c,x-13f,y+8f,26f,4f,0xAA0B0C10.toInt())
-        val legC=if(cl==1)0xFF4A6756.toInt() else 0xFF414C62.toInt()
-        block(c,x-10f,y+2f,8f,10f+leg,legC)
-        block(c,x+3f,y+2f,8f,10f-leg,legC)
-        block(c,x-12f,y-17f+bob,24f,23f,when(cl){
-            1->0xFF587B63.toInt();2->0xFF6B567E.toInt();else->0xFF748DA1.toInt()})
-        block(c,x-7f,y-13f+bob,15f,17f,when(cl){
-            1->0xFF90AF88.toInt();2->0xFFA190C0.toInt();else->0xFFBAC9CB.toInt()})
-        block(c,x-10f,y-31f+bob,20f,17f,when(cl){
-            1->0xFF4B6655.toInt();2->0xFF5F5579.toInt();else->0xFF8E9EAC.toInt()})
-        block(c,x-8f,y-27f+bob,16f,9f,0xFFDDE3DE.toInt())
+        block(c,x-14f,y+10f,28f,4f,0xAA0B0C10.toInt())
+        if(chest!=null){
+            block(c,x-13f,y-17f+bob,26f,27f,0xFF302837.toInt())
+        }
+        block(c,x-11f,y+2f,9f,11f+leg,bootCol)
+        block(c,x+3f,y+2f,9f,11f-leg,bootCol)
+        block(c,x-12f,y-17f+bob,24f,24f,chestCol)
+        block(c,x-8f,y-14f+bob,16f,17f,
+            if(chest==null)0xFFC0C9C7.toInt() else bright(chestCol,22))
+        if(chest!=null){
+            block(c,x-15f,y-19f+bob,8f,9f,chestCol)
+            block(c,x+8f,y-19f+bob,8f,9f,chestCol)
+            block(c,x-4f,y-10f+bob,8f,6f,0xFFE4D29B.toInt())
+        }
+        // Helmet silhouette changes from leather hood to metal crown and visor.
+        block(c,x-10f,y-31f+bob,20f,17f,helmCol)
+        if(helmet!=null){
+            block(c,x-13f,y-34f+bob,26f,6f,helmCol)
+            block(c,x-10f,y-37f+bob,20f,5f,
+                if(helmet.rarity>=3)0xFFFFD17B.toInt() else helmCol)
+            if("корона" in helmet.name.lowercase()||helmet.rarity>=4){
+                for(i in -1..1)block(c,x+i*7f-2f,y-42f+bob,4f,8f,helmCol)
+            }
+        }
+        block(c,x-8f,y-26f+bob,16f,8f,0xFFDDE3DE.toInt())
         block(c,x-7f,y-21f+bob,14f,4f,0xFF1B2636.toInt())
         dot(c,x-2f,y-21f+bob,accent,3f)
-        block(c,x-18f,y-10f+bob,7f,20f,0xFF6A544A.toInt())
-        block(c,x-16f,y-8f+bob,6f,14f,0xFFBDA16C.toInt())
-        if(cl==1){
-            block(c,x+14f,y-12f,2f,25f,0xFFBCA578.toInt())
-            block(c,x+15f,y-10f,6f,18f,accent)
-        }else if(cl==2){
-            block(c,x+12f,y-19f,3f,30f,0xFFB7A076.toInt())
-            block(c,x+9f,y-24f,9f,8f,accent)
-        }else{
-            block(c,x+13f,y-14f+bob,3f,28f,0xFFE3E8E7.toInt())
-            block(c,x+10f,y+6f+bob,10f,3f,0xFFCEAC73.toInt())
+        block(c,x-18f,y-10f+bob,7f,19f,gloveCol)
+        block(c,x-16f,y-7f+bob,6f,12f,bright(gloveCol,22))
+        if(gloves!=null)block(c,x-19f,y+3f+bob,9f,6f,gloveCol)
+        if(amulet!=null){
+            block(c,x-2f,y-12f+bob,5f,7f,
+                gearColor(amulet.rarity,0xFFE2B979.toInt()))
+            dot(c,x,y-10f+bob,0xFFFFFFFF.toInt(),2f)
         }
-        if(camp)block(c,x-13f,y-34f,26f,3f,0xFF81BF9C.toInt())
+        if(ring!=null&&ring.rarity>=3){
+            dot(c,x-22f,y+3f+bob,0xFFE9C67F.toInt(),4f)
+            dot(c,x-22f,y+3f+bob,0xFFFFFFFF.toInt(),2f)
+        }
+        // Base held weapon respects weapon type, not just class.
+        val weaponName=(h.weaponItem?.name?:h.weaponName).lowercase()
+        val style=when{
+            "топор" in weaponName->"smash"
+            "лук" in weaponName->"arrow"
+            "посох" in weaponName||"жезл" in weaponName->"magic"
+            else->if(cl==1)"arrow" else if(cl==2)"magic" else "slash"
+        }
+        val weaponColor=gearColor(h.weaponItem?.rarity?:-1,0xFFCED4D6.toInt())
+        when(style){
+            "arrow"->{
+                block(c,x+15f,y-18f+bob,3f,30f,0xFFD3B58A.toInt())
+                block(c,x+19f,y-17f+bob,2f,29f,weaponColor)
+                block(c,x+12f,y-4f+bob,13f,2f,0xFFE3E3CC.toInt())
+            }
+            "magic"->{
+                block(c,x+14f,y-19f+bob,4f,34f,0xFFA88B69.toInt())
+                block(c,x+10f,y-25f+bob,12f,9f,weaponColor)
+                dot(c,x+14f,y-23f+bob,0xFFEBF8FC.toInt(),4f)
+            }
+            "smash"->{
+                block(c,x+15f,y-14f+bob,3f,29f,0xFFC2A27D.toInt())
+                block(c,x+10f,y-19f+bob,14f,12f,weaponColor)
+                block(c,x+10f,y-18f+bob,14f,3f,0xFFE3DBB8.toInt())
+            }
+            else->{
+                block(c,x+14f,y-15f+bob,4f,31f,weaponColor)
+                block(c,x+13f,y-19f+bob,6f,8f,0xFFE2EAF1.toInt())
+                block(c,x+11f,y+7f+bob,10f,3f,0xFFCEAC73.toInt())
+            }
+        }
+        if(camp)block(c,x-13f,y-41f,26f,3f,0xFF81BF9C.toInt())
+    }
+    private fun weaponFx(c:Canvas,x:Float,y:Float,tx:Float,ty:Float,
+        h:HeroState,frame:Int,accent:Int){
+        val color=if(h.lastCritical)0xFFFFD56D.toInt() else accent
+        when(h.attackVisual){
+            "smash"->{
+                for(i in 0..3){
+                    block(c,tx-19f+i*12f,ty+7f-(i%2)*7f,10f,4f,color)
+                    block(c,tx-17f+i*12f,ty+8f,3f,10f,0xFF8D7656.toInt())
+                }
+                txt(c,"!",tx-4f,ty-38f,13f,color)
+            }
+            "arrow"->{
+                val progress=(frame%8)/7f
+                val bx=x+(tx-x)*progress
+                val by=y-10f+(ty-y)*progress
+                block(c,bx,by,17f,3f,0xFFE7EBE1.toInt())
+                block(c,bx+14f,by-3f,5f,9f,color)
+            }
+            "magic"->{
+                for(i in 0..6){
+                    val progress=(i+(frame%6)).toFloat()/12f
+                    val bx=x+(tx-x)*progress
+                    val by=y-18f+(ty-y)*progress
+                    dot(c,bx,by,if(i%2==0)color else 0xFFB8F5FF.toInt(),5f)
+                }
+                for(i in 0..3){
+                    dot(c,tx-16f+i*10f,ty-30f+(i%2)*10f,color,4f)
+                }
+            }
+            else->{
+                for(i in 0..7){
+                    val xi=tx-25f+i*7f
+                    val yi=ty-39f+i*4f
+                    block(c,xi,yi,8f,4f,if(i%2==0)color else 0xFFF3EEE2.toInt())
+                }
+            }
+        }
     }
     private fun enemy(c:Canvas,x:Float,y:Float,h:HeroState,frame:Int,accent:Int){
         val boss=h.roomKind=="boss"
