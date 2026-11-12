@@ -207,9 +207,9 @@ object DungeonScene {
         val result=Bitmap.createBitmap(W,H,Bitmap.Config.ARGB_8888)
         val out=Canvas(result)
         val nearest=Paint().apply{isAntiAlias=false;isFilterBitmap=false}
-        val ratio=zoom.coerceIn(1f,1.75f)
-        val sourceWidth=(W/ratio).toInt().coerceAtLeast(180)
-        val sourceHeight=(176f/ratio).toInt().coerceAtLeast(95)
+        val cameraZoom=zoom.coerceIn(1f,1.75f)
+        val sourceWidth=(W/cameraZoom).toInt().coerceAtLeast(180)
+        val sourceHeight=(176f/cameraZoom).toInt().coerceAtLeast(95)
         val left=(px.toInt()-sourceWidth/2).coerceIn(0,W-sourceWidth)
         val top=(py.toInt()-sourceHeight/2).coerceIn(17,193-sourceHeight)
         out.drawBitmap(b,Rect(0,0,W,17),Rect(0,0,W,17),nearest)
