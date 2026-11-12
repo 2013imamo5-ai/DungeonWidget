@@ -55,7 +55,7 @@ object EquipmentLogic {
             }
         }
         val groups=items.filter{it.set>0}.groupingBy{it.set}.eachCount()
-        val bonus=groups.values.sumOf{if(it>=4)12 else if(it>=2)4 else 0}
+        val bonus=groups.values.fold(0){acc,count -> acc+(if(count>=4)12 else if(count>=2)4 else 0)}
         return EquipmentStats(a+bonus,d+bonus,hp+bonus*2,crit,dodge,regen,poison,bonus)
     }
     fun targetSlot(g:Gear,secondRing:Boolean=false)=if(g.slot=="ring"&&secondRing)"ring2" else g.slot
