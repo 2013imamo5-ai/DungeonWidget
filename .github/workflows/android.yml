@@ -37,10 +37,10 @@ jobs:
       - name: Build permanently signed APK
         run: |
           gradle --no-daemon :app:assembleRelease
-          cp app/build/outputs/apk/release/app-release.apk DungeonWidget-v0.4.5.apk
+          cp app/build/outputs/apk/release/app-release.apk DungeonWidget-v0.5.0.apk
       - name: Publish direct APK
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release view v0.4.5 >/dev/null 2>&1 && gh release delete v0.4.5 --yes || true
-          gh release create v0.4.5 DungeonWidget-v0.4.5.apk --title "Dungeon Widget v0.4.5" --notes "Fix expanded-widget scene cropping: preserve the full pixel-art dungeon at all sizes, remove duplicate in-image HUD text, and maintain existing game progress."
+          gh release view v0.5.0 >/dev/null 2>&1 && gh release delete v0.5.0 --yes || true
+          gh release create v0.5.0 DungeonWidget-v0.5.0.apk --title "Dungeon Widget v0.5.0" --notes "New inventory overhaul: 4-column grid, pixel-art equipment icons, filters and comparison, safe favorites, smart loot, automatic class loadouts, helmet gloves boots and two rings, crafting materials and expanded 60-slot backpack. Existing saves preserved."

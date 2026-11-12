@@ -37,27 +37,32 @@ data class HeroState(
     var lastDamage:Int=0,var cooldown:Int=0,var status:String="",
     var effectType:String="",var effectTicks:Int=0,
     var recovery:Int=0,var autoPotion:Int=35,var autoSalvage:Boolean=false,
+    var autoEquip:Boolean=false,var autoSalvageRarity:Int=1,
     var theme:Int=0,var opacity:Int=92,var eco:Boolean=false,
     var questDay:String="",var questCount:Int=0,var questClaimed:Boolean=false,
     var offlineReport:String="",var lastReportAt:Long=0,
     val gear:MutableList<Gear> = mutableListOf(),
     val equipment:MutableMap<String,String> = mutableMapOf(),
     val discovered:MutableSet<String> = mutableSetOf(),
-    val achievements:MutableSet<String> = mutableSetOf()
+    val achievements:MutableSet<String> = mutableSetOf(),
+    val favorites:MutableSet<String> = mutableSetOf(),
+    val newItems:MutableSet<String> = mutableSetOf()
 ){
-    val maxHp:Int get()=40+(level-1)*8+camp*6+healer*10+if(heroClass==0)10 else 0
+    val maxHp:Int get()=40+(level-1)*8+camp*6+healer*10+(if(heroClass==0)10 else 0)+equipmentStats.health
+    val equipmentStats:EquipmentStats get()=EquipmentLogic.stats(this)
+    val inventoryLimit:Int get()=60
     val biomeId:Int get()=((floor-1)/5)%4
     val biome:String get()=listOf("Забытый склеп","Грибные пещеры","Пепельная крепость","Ледяные катакомбы")[biomeId]
     val className:String get()=listOf("Воин","Следопыт","Маг")[heroClass.coerceIn(0,2)]
     val weaponItem:Gear? get()=gear.firstOrNull{it.id==equipment["weapon"]}
     val armorItem:Gear? get()=gear.firstOrNull{it.id==equipment["armor"]}
     val attack:Int get()=8+level*3+weapon*2+forge*2+skillAttack*3+
-        (weaponItem?.power?:0)+(if(heroClass==2)level*2 else 0)+setBonus
+        equipmentStats.attack+(if(heroClass==2)level*2 else 0)
     val defense:Int get()=armor*2+camp/2+skillDefense*2+
-        (armorItem?.power?:0)+(if(heroClass==0)4 else 0)+setBonus
-    val setBonus:Int get()=if(gear.filter{equipment.values.contains(it.id)&&it.set>0}.groupingBy{it.set}.eachCount().any{it.value>=2})4 else 0
-    val dodge:Int get()=4+(if(heroClass==1)10 else 0)+skillLuck*2
-    val crit:Int get()=6+skillLuck*3+(if(heroClass==1)7 else 0)
+        equipmentStats.defense+(if(heroClass==0)4 else 0)
+    val setBonus:Int get()=equipmentStats.setBonus
+    val dodge:Int get()=4+(if(heroClass==1)10 else 0)+skillLuck*2+equipmentStats.dodge
+    val crit:Int get()=6+skillLuck*3+(if(heroClass==1)7 else 0)+equipmentStats.crit
     val progress:Int get()=pathStep.coerceAtLeast(0)
     fun asJson()=JSONObject().apply {
         val ints=mapOf("hp" to hp,"level" to level,"xp" to xp,"gold" to gold,
@@ -78,6 +83,9 @@ data class HeroState(
         put("autoSalvage",autoSalvage);put("eco",eco);put("questDay",questDay)
         put("questClaimed",questClaimed);put("offlineReport",offlineReport)
         put("lastReportAt",lastReportAt);put("effectType",effectType);put("effectTicks",effectTicks)
+        put("autoEquip",autoEquip);put("autoSalvageRarity",autoSalvageRarity)
+        put("favorites",JSONArray(favorites.toList()))
+        put("newItems",JSONArray(newItems.toList()))
         put("gear",JSONArray().apply{gear.forEach{put(it.json())}})
         put("equipment",JSONObject().apply{equipment.forEach{(k,v)->put(k,v)}})
         put("discovered",JSONArray(discovered.toList()))
@@ -108,7 +116,10 @@ data class HeroState(
             h.status=o.optString("status");h.effectType=o.optString("effectType")
             h.effectTicks=o.optInt("effectTicks");h.recovery=o.optInt("recovery")
             h.autoPotion=o.optInt("autoPotion",35).coerceIn(10,90)
-            h.autoSalvage=o.optBoolean("autoSalvage");h.theme=o.optInt("theme").coerceIn(0,2)
+            h.autoSalvage=o.optBoolean("autoSalvage")
+            h.autoEquip=o.optBoolean("autoEquip")
+            h.autoSalvageRarity=o.optInt("autoSalvageRarity",1).coerceIn(0,2)
+            h.theme=o.optInt("theme").coerceIn(0,2)
             h.opacity=o.optInt("opacity",92).coerceIn(20,100);h.eco=o.optBoolean("eco")
             h.questDay=o.optString("questDay");h.questCount=o.optInt("questCount")
             h.questClaimed=o.optBoolean("questClaimed")
@@ -119,6 +130,10 @@ data class HeroState(
             }
             val equipped=o.optJSONObject("equipment")
             if(equipped!=null)for(key in equipped.keys())h.equipment[key]=equipped.optString(key)
+            val starred=o.optJSONArray("favorites")
+            if(starred!=null)for(i in 0 until starred.length())h.favorites.add(starred.optString(i))
+            val unread=o.optJSONArray("newItems")
+            if(unread!=null)for(i in 0 until unread.length())h.newItems.add(unread.optString(i))
             val seen=o.optJSONArray("discovered")
             if(seen!=null)for(i in 0 until seen.length())h.discovered.add(seen.optString(i))
             val medals=o.optJSONArray("achievements")
@@ -219,29 +234,67 @@ object DungeonGame{
             h.log="Награда за задание: 100 золота и 2 кристалла";true
         }
     }
-    fun equip(ctx:Context,id:String)=mutate(ctx){h->
+    fun equip(ctx:Context,id:String,secondRing:Boolean=false)=mutate(ctx){h->
         val item=h.gear.firstOrNull{it.id==id}
         if(item==null)false else{
-            h.equipment[item.slot]=item.id;h.log="Экипировано: "+item.name;true
+            EquipmentLogic.equip(h,item,secondRing)
+            h.newItems.remove(id)
+            h.log="Экипировано: "+item.name
+            true
         }
     }
-    fun salvage(ctx:Context,id:String)=mutate(ctx){h->
+    fun toggleFavorite(ctx:Context,id:String)=mutate(ctx){h->
+        if(h.gear.none{it.id==id})false else{
+            if(!h.favorites.add(id))h.favorites.remove(id)
+            h.log=if(id in h.favorites)"Предмет защищён" else "Защита предмета снята"
+            true
+        }
+    }
+    fun viewItem(ctx:Context,id:String)=mutate(ctx){h->h.newItems.remove(id)}
+    fun equipBest(ctx:Context,role:Int)=mutate(ctx){h->
+        if(role !in 0..2)false else{
+            h.heroClass=role
+            val count=EquipmentLogic.best(h,role)
+            h.hp=h.hp.coerceAtMost(h.maxHp)
+            h.log="Подобран комплект для "+h.className+": "+count+" изменений"
+            true
+        }
+    }
+    fun salvage(ctx:Context,id:String,force:Boolean=false)=mutate(ctx){h->
         val item=h.gear.firstOrNull{it.id==id}
-        if(item==null||h.equipment.values.contains(item.id))false else{
-            h.gear.remove(item);h.shards+=1+item.rarity*2
-            h.log="Разобрано: "+item.name+" · материалы +"+(1+item.rarity*2);true
+        if(item==null||h.equipment.values.contains(id)||
+            (!force&&!EquipmentLogic.canSalvage(h,item)))false else{
+            h.gear.remove(item);h.favorites.remove(id);h.newItems.remove(id)
+            h.shards+=1+item.rarity*2
+            h.log="Разобрано: "+item.name+" · материалы +"+(1+item.rarity*2)
+            true
         }
     }
     fun salvageWeak(ctx:Context,maxRarity:Int)=mutate(ctx){h->
         val unwanted=h.gear.filter{
-            it.rarity<=maxRarity && !h.equipment.values.contains(it.id)
+            it.rarity<=maxRarity && EquipmentLogic.canSalvage(h,it)
         }
         if(unwanted.isEmpty())false else{
             val removed=unwanted.map{it.id}.toSet()
             h.gear.removeAll{it.id in removed}
+            h.newItems.removeAll(removed)
             h.shards+=unwanted.sumOf{1+it.rarity*2}
             h.log="Разобрано "+unwanted.size+" предметов. Материалы: +"+
                 unwanted.sumOf{1+it.rarity*2}
+            true
+        }
+    }
+    fun salvageFiltered(ctx:Context,rarity:Int,slot:String="all")=mutate(ctx){h->
+        val selected=h.gear.filter{
+            it.rarity<=rarity && (slot=="all"||it.slot==slot) &&
+                EquipmentLogic.canSalvage(h,it)
+        }
+        if(selected.isEmpty())false else{
+            val ids=selected.map{it.id}.toSet()
+            h.gear.removeAll{it.id in ids}
+            h.newItems.removeAll(ids)
+            h.shards+=selected.sumOf{1+it.rarity*2}
+            h.log="Разобрано "+selected.size+" предметов"
             true
         }
     }
@@ -290,50 +343,70 @@ object DungeonGame{
             h.log="Торговец передал предмет";true
         }
     }
-    fun changeSettings(ctx:Context,potion:Int?=null,auto:Boolean?=null,theme:Int?=null,opacity:Int?=null,eco:Boolean?=null)=mutate(ctx){h->
+    fun changeSettings(ctx:Context,potion:Int?=null,auto:Boolean?=null,theme:Int?=null,
+        opacity:Int?=null,eco:Boolean?=null,autoGear:Boolean?=null,
+        autoRarity:Int?=null)=mutate(ctx){h->
         potion?.let{h.autoPotion=it.coerceIn(10,90)}
         auto?.let{h.autoSalvage=it}
+        autoGear?.let{h.autoEquip=it}
+        autoRarity?.let{h.autoSalvageRarity=it.coerceIn(0,2)}
         theme?.let{h.theme=it.coerceIn(0,2)}
         opacity?.let{h.opacity=it.coerceIn(20,100)}
         eco?.let{h.eco=it}
         true
     }
     private fun createGear(h:HeroState,crafted:Boolean=false):Gear{
-        val slot=listOf("weapon","armor","ring","amulet").random()
+        val slot=listOf("weapon","armor","helmet","gloves","boots","ring","amulet").random()
         val quality=Random.nextInt(100)+(if(crafted)12+h.forge*2 else 0)+h.scouts
         val rarity=when{quality>=105->4;quality>=93->3;quality>=76->2;quality>=46->1;else->0}
         val names=when(slot){
             "weapon"->listOf("Клинок","Топор","Лук","Посох")
             "armor"->listOf("Доспех","Мантия","Кольчуга","Панцирь")
+            "helmet"->listOf("Шлем","Капюшон","Корона","Забрало")
+            "gloves"->listOf("Перчатки","Латные рукавицы","Наручи","Рукавицы")
+            "boots"->listOf("Сапоги","Ботинки","Поножи","Сандалии")
             "ring"->listOf("Кольцо","Перстень","Печать","Обруч")
             else->listOf("Амулет","Оберег","Талисман","Реликварий")
         }
         val prefix=listOf("Забытый","Ночной","Огненный","Рунный","Древний","Ледяной")
         val name=if(rarity==4)when(slot){
             "weapon"->"Гибель королей";"armor"->"Панцирь вечной ночи"
-            "ring"->"Печать звёзд";else->"Сердце бездны"
+            "ring"->"Печать звёзд";"helmet"->"Корона праха"
+            "gloves"->"Руки короля";"boots"->"Поступь тьмы"
+            else->"Сердце бездны"
         }else prefix.random()+" "+names.random()
-        val trait=when(Random.nextInt(5)){0->"крит";1->"яд";2->"регенерация";3->"уклонение";else->"защита"}
+        val trait=when(Random.nextInt(7)){
+            0->"крит";1->"яд";2->"регенерация";3->"уклонение"
+            4->"защита";5->"здоровье";else->"атака"
+        }
         return Gear(System.nanoTime().toString()+"-"+Random.nextInt(10000),
             name,slot,rarity,(1+h.floor/3+rarity*3+Random.nextInt(3)).coerceAtMost(180),trait,
             if(Random.nextInt(4)==0)Random.nextInt(1,4) else 0)
     }
     private fun collect(h:HeroState,item:Gear){
-        if(h.autoSalvage&&item.rarity<=1){h.shards+=1+item.rarity*2;return}
-        if(h.gear.size>=42){
-            val discard=h.gear.filterNot{h.equipment.values.contains(it.id)}
-                .minByOrNull{it.rarity*100+it.power}
-            val newScore=item.rarity*100+item.power
-            val oldScore=discard?.let{it.rarity*100+it.power} ?: Int.MAX_VALUE
-            if(discard==null||newScore<=oldScore){
-                h.shards+=1+item.rarity*2
-                return
-            }
-            h.gear.remove(discard)
-            h.shards+=1+discard.rarity*2
+        val safeToScrap=item.rarity<3 && item.set==0
+        // Never discard a potentially useful item just because it is low rarity:
+        // compare against equipped equipment first.
+        val current=h.gear.firstOrNull{it.id==h.equipment[item.slot]}
+        val upgrade=current==null || EquipmentLogic.weight(item,h.heroClass)>
+            EquipmentLogic.weight(current,h.heroClass)+4
+        if(h.autoSalvage && item.rarity<=h.autoSalvageRarity &&
+            safeToScrap && !upgrade){
+            h.shards+=1+item.rarity*2
+            return
+        }
+        if(!EquipmentLogic.makeInventoryRoom(h,item,h.inventoryLimit)){
+            h.shards+=1+item.rarity*2
+            return
         }
         h.gear.add(item)
-        if(h.equipment[item.slot]==null){h.equipment[item.slot]=item.id}
+        h.newItems.add(item.id)
+        if(h.equipment[item.slot]==null &&
+            !(item.slot=="ring" && h.equipment["ring2"]!=null)){
+            EquipmentLogic.equip(h,item)
+        }else{
+            EquipmentLogic.autoEquip(h,item)
+        }
     }
     private fun gainXp(h:HeroState,amount:Int){
         h.xp+=amount
@@ -380,8 +453,10 @@ object DungeonGame{
         val xp=6+h.floor*2+(if(boss)45 else 0)
         gainXp(h,xp)
         h.gold+=5+h.floor+Random.nextInt(10)+(if(boss)120 else 0)
-        val traits=h.gear.filter{h.equipment.values.contains(it.id)}.map{it.trait}
-        if("регенерация" in traits||h.combo%6==0)h.hp=min(h.maxHp,h.hp+3+h.level)
+        val effects=h.equipmentStats
+        if(effects.regeneration>0||h.combo%6==0)
+            h.hp=min(h.maxHp,h.hp+3+h.level+effects.regeneration)
+        h.lastDamage+=effects.poison
         if(!dodge && Random.nextInt(100)<(if(boss)33 else 13)){
             h.effectType=when(h.biomeId){
                 0->if(Random.nextBoolean())"bleed" else "stun"

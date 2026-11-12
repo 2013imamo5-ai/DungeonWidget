@@ -241,6 +241,10 @@ class MainActivity:Activity(){
         }
     }
     private fun switchPage(idx:Int){
+        if(idx==1){
+            startActivity(Intent(this,InventoryActivity::class.java))
+            return
+        }
         if(page!=idx){page=idx;buildTabs();details.scrollTo(0,0)}
         refreshPage()
     }
@@ -262,6 +266,12 @@ class MainActivity:Activity(){
         }
     }
     private fun expedition(){
+        card(body,"▤ НОВЫЙ ИНВЕНТАРЬ",
+            "Сетка предметов, новые слоты, сравнение характеристик, избранное и автосбор.") {
+            action(this,"ОТКРЫТЬ РЮКЗАК · "+state.gear.size+"/"+state.inventoryLimit) {
+                startActivity(Intent(this@MainActivity,InventoryActivity::class.java))
+            }
+        }
         card(body,"⚔ АВТОМАТИЧЕСКАЯ ЭКСПЕДИЦИЯ",
             "Герой сам выбирает путь, открывает сундуки и сражается. Коснись сцены выше, чтобы открыть увеличенный режим. При гибели экипировка сохраняется."){
             action(this,if(state.paused)"▶ ПРОДОЛЖИТЬ ИССЛЕДОВАНИЕ" else "Ⅱ ПАУЗА"){change{DungeonGame.toggle(this@MainActivity)}}
