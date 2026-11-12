@@ -37,6 +37,8 @@ data class HeroState(
     var lastDamage:Int=0,var cooldown:Int=0,var status:String="",
     var enemyHp:Int=0,var enemyMaxHp:Int=0,var battleRound:Int=0,
     var incomingDamage:Int=0,var lastCritical:Boolean=false,var lastDodge:Boolean=false,
+    var abilityMeter:Int=0,var lastAbility:String="",var tactic:Int=0,
+    var elite:Boolean=false,var elitesDefeated:Int=0,var bossPhase:Int=0,
     var attackVisual:String="slash",var enemyWarning:Boolean=false,
     var effectType:String="",var effectTicks:Int=0,
     var recovery:Int=0,var autoPotion:Int=35,var autoSalvage:Boolean=false,
@@ -81,7 +83,9 @@ data class HeroState(
             "cooldown" to cooldown,"recovery" to recovery,"autoPotion" to autoPotion,
             "theme" to theme,"opacity" to opacity,"questCount" to questCount,
             "enemyHp" to enemyHp,"enemyMaxHp" to enemyMaxHp,
-            "battleRound" to battleRound,"incomingDamage" to incomingDamage)
+            "battleRound" to battleRound,"incomingDamage" to incomingDamage,
+            "abilityMeter" to abilityMeter,"tactic" to tactic,
+            "elitesDefeated" to elitesDefeated,"bossPhase" to bossPhase)
         ints.forEach{(k,v)->put(k,v)}
         put("paused",paused);put("lastTick",lastTick);put("log",log)
         put("enemy",enemy);put("event",event);put("weaponName",weaponName)
@@ -90,6 +94,7 @@ data class HeroState(
         put("questClaimed",questClaimed);put("offlineReport",offlineReport)
         put("lastReportAt",lastReportAt);put("effectType",effectType);put("effectTicks",effectTicks)
         put("attackVisual",attackVisual);put("enemyWarning",enemyWarning)
+        put("lastAbility",lastAbility);put("elite",elite)
         put("lastCritical",lastCritical);put("lastDodge",lastDodge)
         put("autoEquip",autoEquip);put("autoSalvageRarity",autoSalvageRarity)
         put("favorites",JSONArray(favorites.toList()))
@@ -124,6 +129,12 @@ data class HeroState(
             h.lastDamage=o.optInt("lastDamage");h.cooldown=o.optInt("cooldown")
             h.enemyHp=o.optInt("enemyHp");h.enemyMaxHp=o.optInt("enemyMaxHp")
             h.battleRound=o.optInt("battleRound");h.incomingDamage=o.optInt("incomingDamage")
+            h.abilityMeter=o.optInt("abilityMeter").coerceIn(0,4)
+            h.tactic=o.optInt("tactic").coerceIn(0,2)
+            h.lastAbility=o.optString("lastAbility","")
+            h.elite=o.optBoolean("elite")
+            h.elitesDefeated=o.optInt("elitesDefeated")
+            h.bossPhase=o.optInt("bossPhase")
             h.attackVisual=o.optString("attackVisual","slash")
             h.enemyWarning=o.optBoolean("enemyWarning")
             h.lastCritical=o.optBoolean("lastCritical");h.lastDodge=o.optBoolean("lastDodge")
@@ -238,6 +249,13 @@ object DungeonGame{
         if(kind !in 0..2)false else{h.heroClass=kind;h.hp=min(h.hp,h.maxHp);h.log="Класс: "+h.className;true}
     }
     fun skillPoints(h:HeroState)=h.level/2-h.skillAttack-h.skillDefense-h.skillLuck
+    fun setTactic(ctx:Context,tactic:Int)=mutate(ctx){h->
+        if(tactic !in 0..2)false else{
+            h.tactic=tactic
+            h.log="Тактика: "+listOf("Сбалансированная","Осторожная","Агрессивная")[tactic]
+            true
+        }
+    }
     fun train(ctx:Context,which:Int)=mutate(ctx){h->
         if(skillPoints(h)<=0)false else{
             when(which){0->h.skillAttack++;1->h.skillDefense++;else->h.skillLuck++}
@@ -461,6 +479,7 @@ object DungeonGame{
         h.deaths++;h.hp=h.maxHp;h.floor=1;h.room=1
         h.pathStep=0;h.combo=0;h.recovery=4;h.status="";h.effectTicks=0;h.effectType=""
         h.enemyHp=0;h.enemyMaxHp=0;h.battleRound=0;h.enemyWarning=false
+        h.elite=false;h.bossPhase=0;h.lastAbility=""
         h.potions=max(2,h.potions);h.event="camp"
         h.log="Герой пал! Возвращение в лагерь. Экипировка сохранена"
     }
@@ -491,17 +510,21 @@ object DungeonGame{
     }
     private fun initializeEnemy(h:HeroState){
         val boss=h.roomKind=="boss"
-        h.enemy=if(boss){
+        val enemyName=if(boss){
             listOf("Костяной король","Древний страж","Пепельный титан","Ледяной лич")[h.biomeId]
         }else enemyPools[h.biomeId].random()
-        h.enemyMaxHp=if(boss)max(90+h.floor*16,h.attack*4+h.floor*4)
+        h.elite=!boss && Random.nextInt(100)<12
+        h.enemy=if(h.elite)"Элитный "+enemyName else enemyName
+        h.enemyMaxHp=if(boss)max(120+h.floor*18,h.attack*6+h.floor*5)
+            else if(h.elite)max(70+h.floor*9,h.attack*4+h.floor*3)
             else max(24+h.floor*5,h.attack*2+h.floor*2)
         h.enemyHp=h.enemyMaxHp
-        h.battleRound=0;h.enemyWarning=false
-        h.incomingDamage=0;h.lastDamage=0
+        h.battleRound=0;h.bossPhase=0;h.enemyWarning=false
+        h.incomingDamage=0;h.lastDamage=0;h.lastAbility=""
         h.event="explore"
     }
-    // Each encounter takes multiple tactical turns. Rewards are granted only once on victory.
+    // Three automatic abilities, one per class; no manual inputs required.
+    // Tactics alter risk but do not stop autonomous exploration.
     private fun combat(h:HeroState,boss:Boolean){
         if(h.enemyHp<=0)return
         h.discovered.add(h.enemy)
@@ -509,64 +532,102 @@ object DungeonGame{
         val crit=Random.nextInt(100)<h.crit.coerceIn(0,65)
         val dodge=Random.nextInt(100)<h.dodge.coerceIn(0,55)
         val powered=h.cooldown<=0
+        val special=h.abilityMeter>=4
+        h.lastAbility=""
         h.attackVisual=weaponStyle(h)
         var damage=h.attack+Random.nextInt(max(3,h.attack/5))
         if(crit)damage+=h.attack/2
         if(powered)damage+=10+h.skillAttack*2
         if(h.attackVisual=="magic")damage+=h.level
         if(h.attackVisual=="smash")damage+=h.attack/5
-        val enemyGuard=("страж" in h.enemy.lowercase()||
-            "рыцарь" in h.enemy.lowercase()||"голем" in h.enemy.lowercase())
-        if(enemyGuard)damage=(damage*80/100).coerceAtLeast(1)
+        val guard="страж" in h.enemy.lowercase()||
+            "рыцарь" in h.enemy.lowercase()||"голем" in h.enemy.lowercase()
+        if(guard)damage=(damage*80/100).coerceAtLeast(1)
         val effects=h.equipmentStats
-        if(effects.poison>0)damage+=effects.poison
+        damage+=effects.poison
+        if(special){
+            h.lastAbility=when(h.heroClass){
+                0->"Щитовой удар"
+                1->"Тройной выстрел"
+                else->"Магический всплеск"
+            }
+            damage+=when(h.heroClass){
+                0->h.attack/2+h.defense/4
+                1->h.attack
+                else->h.attack+h.level*2
+            }
+            h.abilityMeter=0
+            if(h.heroClass==2)h.hp=min(h.maxHp,h.hp+max(2,h.maxHp/15))
+        }else h.abilityMeter=(h.abilityMeter+1).coerceAtMost(4)
+        if(h.tactic==1)damage=damage*88/100
+        if(h.tactic==2)damage=damage*128/100
+        damage=damage.coerceAtLeast(1)
         h.lastDamage=damage
         h.lastCritical=crit
         h.lastDodge=dodge
         h.enemyHp=(h.enemyHp-damage).coerceAtLeast(0)
         h.battleRound++
         h.cooldown=if(powered)4 else h.cooldown-1
-        // Defeated enemies cannot retaliate on their final turn.
+        // Phase two is announced BEFORE the empowered blow on the next turn.
+        val phaseTransition=boss && h.enemyHp>0 &&
+            h.bossPhase==0 && h.enemyHp*2<=h.enemyMaxHp
+        val heavyPending=h.enemyWarning
+        if(phaseTransition)h.bossPhase=1
         if(h.enemyHp>0){
-            val heavy=h.enemyWarning
-            val raw=(6+h.floor*3+(if(boss)18 else 0)+Random.nextInt(12)-h.defense/2).coerceAtLeast(1)
-            val taken=if(dodge)0 else if(heavy)raw*17/10 else raw
+            val heavy=heavyPending
+            val raw=(6+h.floor*3+(if(boss)18 else if(h.elite)12 else 0)+
+                Random.nextInt(12)-h.defense/2).coerceAtLeast(1)
+            var taken=if(dodge)0 else if(heavy)raw*17/10 else raw
+            if(boss && h.bossPhase==1)taken=taken*125/100
+            if(h.tactic==1)taken=taken*65/100
+            if(h.tactic==2)taken=taken*125/100
+            if(special && h.heroClass==0)taken=taken*30/100
             h.incomingDamage=taken
             h.hp-=taken
             if(h.hp<=0){death(h);return}
-            if(!dodge && Random.nextInt(100)<(if(boss)30 else 10)){
+            if(!dodge && Random.nextInt(100)<(if(boss)30 else if(h.elite)17 else 10)){
                 h.effectType=when(h.biomeId){
                     0->if(Random.nextBoolean())"bleed" else "stun"
                     1->"poison";2->"burn";else->"stun"
                 }
                 h.effectTicks=if(h.effectType=="stun")1 else 3
             }
-            h.enemyWarning=(boss && h.battleRound%3==1)||
+            h.enemyWarning=phaseTransition ||
+                (boss && h.battleRound%(if(h.bossPhase>0)2 else 3)==1) ||
                 (!boss && h.battleRound%4==2)
             h.status=when{
+                special->h.lastAbility
+                boss&&h.bossPhase==1->"Босс в ярости!"
                 h.enemyWarning->"Враг готовит мощную атаку!"
                 crit->"Критический удар"
                 dodge->"Уклонение"
                 powered->"Сильный удар"
                 else->"В разгаре боя"
             }
-            h.log=h.enemy+": "+h.enemyHp+"/"+h.enemyMaxHp+" HP · Удар -"+damage+
+            h.log=(if(h.elite)"★ " else "")+h.enemy+": "+
+                h.enemyHp+"/"+h.enemyMaxHp+" HP · -"+damage+
                 (if(dodge)" · Уклонение!" else " · Получено "+taken)+
+                (if(special)" · "+h.lastAbility else "")+
                 (if(h.enemyWarning)" · ОПАСНО!" else "")
             return
         }
         h.enemyWarning=false;h.incomingDamage=0
         h.kills++;h.combo++;h.questCount++
-        val xp=6+h.floor*2+(if(boss)45 else 0)
+        val xp=6+h.floor*2+(if(boss)45 else if(h.elite)28 else 0)
         gainXp(h,xp)
-        h.gold+=5+h.floor+Random.nextInt(10)+(if(boss)120 else 0)
+        h.gold+=5+h.floor+Random.nextInt(10)+
+            (if(boss)120 else if(h.elite)55+h.floor else 0)
         if(effects.regeneration>0||h.combo%6==0)
             h.hp=min(h.maxHp,h.hp+3+h.level+effects.regeneration)
         if(boss){h.bosses++;h.gems+=3;collect(h,createGear(h,true))}
+        if(h.elite){h.elitesDefeated++;collect(h,createGear(h,true))}
         if(Random.nextInt(100)<7+h.scouts)collect(h,createGear(h))
-        h.status=if(crit)"Критический удар" else "Победа"
-        h.log=if(boss)"БОСС повержен: "+h.enemy+"! +3 кристалла"
-            else h.enemy+" побеждён · "+damage+" урона"+(if(crit)" · КРИТ!" else "")
+        h.status=if(special)h.lastAbility else if(crit)"Критический удар" else "Победа"
+        h.log=when{
+            boss->"БОСС повержен: "+h.enemy+"! +3 кристалла"
+            h.elite->"Элитный враг повержен! Редкая добыча."
+            else->h.enemy+" побеждён · "+damage+" урона"
+        }+(if(special)" · "+h.lastAbility else "")
     }
     private fun resolve(h:HeroState){
         h.status=""
@@ -634,7 +695,10 @@ object DungeonGame{
         if(h.pathStep==0){
             h.roomKind=roomRoll(h);h.event="explore"
             if(h.roomKind=="boss"||h.roomKind=="battle")initializeEnemy(h)
-            else{h.enemyHp=0;h.enemyMaxHp=0;h.battleRound=0;h.enemyWarning=false}
+            else{
+                h.enemyHp=0;h.enemyMaxHp=0;h.battleRound=0
+                h.enemyWarning=false;h.elite=false;h.lastAbility=""
+            }
         }
         val pathLength=DungeonMap.get(h.floor,h.room).path.size
         val layout=DungeonMap.get(h.floor,h.room)

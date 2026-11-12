@@ -37,10 +37,10 @@ jobs:
       - name: Build permanently signed APK
         run: |
           gradle --no-daemon :app:assembleRelease
-          cp app/build/outputs/apk/release/app-release.apk DungeonWidget-v0.6.2.apk
+          cp app/build/outputs/apk/release/app-release.apk DungeonWidget-v0.7.0.apk
       - name: Publish direct APK
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release view v0.6.2 >/dev/null 2>&1 && gh release delete v0.6.2 --yes || true
-          gh release create v0.6.2 DungeonWidget-v0.6.2.apk --title "Dungeon Widget v0.6.2" --notes "Streamlined backpack layout: remove search field, quick selection and redundant backpack information card. Items are easier to access; gear, saves and other features preserved."
+          gh release view v0.7.0 >/dev/null 2>&1 && gh release delete v0.7.0 --yes || true
+          gh release create v0.7.0 DungeonWidget-v0.7.0.apk --title "Dungeon Widget v0.7.0" --notes "Autonomous class abilities, elite enemies with rare loot, boss phase 2 with warned attacks, tactics for combat, tactical minimap and cleaned-up expedition layout. Existing saves and signing retained."

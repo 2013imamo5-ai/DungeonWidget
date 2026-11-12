@@ -269,12 +269,6 @@ class MainActivity:Activity(){
         }
     }
     private fun expedition(){
-        card(body,"▤ НОВЫЙ ИНВЕНТАРЬ",
-            "Сетка предметов, новые слоты, сравнение характеристик, избранное и автосбор.") {
-            action(this,"ОТКРЫТЬ РЮКЗАК · "+state.gear.size+"/"+state.inventoryLimit) {
-                startActivity(Intent(this@MainActivity,InventoryActivity::class.java))
-            }
-        }
         card(body,"⚔ АВТОМАТИЧЕСКАЯ ЭКСПЕДИЦИЯ",
             "Герой исследует подземелье и проводит несколько ходов в бою. Оружие, броня, шлем, перчатки и сапоги меняют его облик. Коснись сцены для увеличения."){
             action(this,if(state.paused)"▶ ПРОДОЛЖИТЬ ИССЛЕДОВАНИЕ" else "Ⅱ ПАУЗА"){change{DungeonGame.toggle(this@MainActivity)}}
@@ -282,10 +276,20 @@ class MainActivity:Activity(){
                 change{DungeonGame.usePotion(this@MainActivity)}
             }
         }
+        if(state.enemyHp>0){
+            val label=if(state.roomKind=="boss")"☠ БОСС" else if(state.elite)"✦ ЭЛИТНЫЙ ВРАГ" else "⚔ СРАЖЕНИЕ"
+            card(body,label+" · "+state.enemy,
+                "HP врага: "+state.enemyHp+"/"+state.enemyMaxHp+
+                " · Раунд "+state.battleRound+
+                (if(state.bossPhase>0)" · ФАЗА II" else "")+
+                "\nЗаряд умения: "+state.abilityMeter+"/4"+
+                " · "+(if(state.enemyWarning)"⚠ Сильная атака!" else "Автобой")) 
+        }
         card(body,"🗺 ПУТЬ ПО ПОДЗЕМЕЛЬЮ",
             "Пройдено комнат: "+state.roomsCleared+
                 "   ·   Лучшая глубина: "+state.bestFloor+
                 "\nУбито врагов: "+state.kills+"   ·   Боссов: "+state.bosses+
+                "   ·   Элитных: "+state.elitesDefeated+
                 "\nСундуков: "+state.chests+"   ·   Реликвий: "+state.relics+
                 "\nКритические удары: "+state.crit+"%   ·   Уклонение: "+state.dodge+"%")
         card(body,"◈ ЕЖЕДНЕВНАЯ ЦЕЛЬ",
@@ -409,6 +413,22 @@ class MainActivity:Activity(){
                     change{DungeonGame.chooseClass(this@MainActivity,idx)}
                 }
             }
+        }
+        card(body,"⚔ ТАКТИКА АВТОБОЯ",
+            "Герой использует способности самостоятельно. Изменение тактики влияет на наносимый и получаемый урон.") {
+            val tactics=row(this)
+            listOf("БАЛАНС","ОСТОРОЖНО","НАПОР").forEachIndexed{idx,name->
+                mini(tactics,(if(idx==state.tactic)"✓ " else "")+name){
+                    change{DungeonGame.setTactic(this@MainActivity,idx)}
+                }
+            }
+            gap(this,6)
+            addLine(this,when(state.heroClass){
+                0->"Воин: «Щитовой удар» — мощная атака и снижение входящего урона"
+                1->"Следопыт: «Тройной выстрел» — усиленный залп"
+                else->"Маг: «Магический всплеск» — урон и восстановление HP"
+            },13f,muted)
+            addLine(this,"Заряд навыка: "+state.abilityMeter+"/4. Срабатывает автоматически.",12f,muted)
         }
         card(body,"ДЕРЕВО НАВЫКОВ",
             "Очки навыков: "+DungeonGame.skillPoints(state).coerceAtLeast(0)+

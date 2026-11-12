@@ -135,7 +135,21 @@ object DungeonScene {
         when(h.roomKind){
             "boss","battle"->if(showEnemy){
                 val knock=if(impact && hitAge>140) (if(frame%4<2) 4f else -4f) else 0f
+                if(h.elite){
+                    block(c,targetX-22f,targetY-34f,44f,53f,0x33FFD46D)
+                    for(i in 0..7){
+                        val a=(i*19+frame%11)%31
+                        dot(c,targetX-20f+i*5f,targetY-37f+a,
+                            if(i%2==0)0xFFFFD875.toInt() else 0xFFA5F5FF.toInt(),3f)
+                    }
+                }
                 enemy(c,targetX+knock,targetY,h,frame,accent)
+                if(h.elite)txt(c,"ELITE",targetX-20f,targetY-58f,10f,
+                    0xFFF6CD6D.toInt())
+                if(h.roomKind=="boss"&&h.bossPhase>0){
+                    block(c,targetX-26f,targetY-45f,52f,3f,0xFFF55C5A.toInt())
+                    txt(c,"ФАЗА II",targetX-22f,targetY-63f,10f,0xFFFF7D72.toInt())
+                }
                 if(impact && hitAge<350)block(c,targetX-20,targetY-36,40f,56f,0x66FFFFFF)
                 if(h.enemyMaxHp>0){
                     block(c,targetX-26f,targetY-48f,52f,5f,0xFF431E30.toInt())
@@ -188,6 +202,32 @@ object DungeonScene {
             else{
                 dot(c,px+18f,py-16f,accent,3f)
                 dot(c,targetX-18f,targetY-23f,accent,2f)
+            }
+        }
+        if(impact && h.lastAbility.isNotEmpty() && hitAge<1050){
+            val skillColor=when(h.heroClass){
+                0->0xFFB3E0EF.toInt()
+                1->0xFFB8E79B.toInt()
+                else->0xFFD4A9FA.toInt()
+            }
+            txt(c,"УМЕНИЕ!",px-25f,py-49f-hitAge/80f,12f,skillColor)
+            for(i in 0..11){
+                val dx=((i*17)%29-14).toFloat()
+                val dy=((i*13)%27-13).toFloat()
+                dot(c,px+dx,py-15f+dy,skillColor,if(i%3==0)5f else 3f)
+            }
+            if(h.heroClass==0){
+                block(c,px-24f,py-27f,13f,31f,0xFFACC4E6.toInt())
+                block(c,px-20f,py-23f,6f,23f,0xFFEAF2FA.toInt())
+            }else if(h.heroClass==1){
+                for(i in 0..2){
+                    val progress=(frame%9).toFloat()/9f
+                    block(c,px+(targetX-px)*progress,
+                        py-18f+i*7f+(targetY-py)*progress,12f,2f,skillColor)
+                }
+            }else{
+                block(c,targetX-19f,targetY-28f,38f,3f,skillColor)
+                block(c,targetX-3f,targetY-44f,6f,33f,skillColor)
             }
         }
         if(impact && h.incomingDamage>0 && hitAge<750){
@@ -262,8 +302,31 @@ object DungeonScene {
                 txt(out,"КОМНАТА "+h.room,100f,103f,13f,accent)
             }
         }
+        if(live)drawHud(out,layout,h,accent)
         b.recycle()
         return result
+    }
+    // Unobtrusive skill charge and actual explored map, drawn AFTER camera cropping.
+    // Do not place it in the home-screen widget, where details would be too small.
+    private fun drawHud(c:Canvas,room:RoomLayout,h:HeroState,accent:Int){
+        block(c,6f,20f,88f,17f,0xD4141D28.toInt())
+        txt(c,"НАВЫК",11f,31f,9f,0xFFF0D2A2.toInt())
+        for(i in 0..3){
+            block(c,45f+i*11f,26f,8f,5f,
+                if(i<h.abilityMeter)accent else 0xFF49586B.toInt())
+        }
+        val x0=263f
+        val y0=158f
+        block(c,x0-3,y0-3,52f,31f,0xD2131D2A.toInt())
+        for(y in 0..10)for(x in 0..19){
+            if(room.isFloor(x,y)){
+                block(c,x0+x*2.2f,y0+y*2.0f,2f,2f,0xFF697788.toInt())
+            }
+        }
+        val path=room.path
+        val where=path[h.pathStep.coerceIn(0,path.lastIndex)]
+        block(c,x0+where.x*2.2f-1f,y0+where.y*2.0f-1f,4f,4f,accent)
+        block(c,x0+18*2.2f,y0+8*2f,3f,3f,0xFF9BE6A3.toInt())
     }
     private fun bright(c:Int,a:Int)=Color.rgb(
         min(255,Color.red(c)+a),min(255,Color.green(c)+a),min(255,Color.blue(c)+a))
