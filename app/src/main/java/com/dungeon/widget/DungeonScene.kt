@@ -36,7 +36,7 @@ object DungeonScene {
         p.color=col;p.textSize=size;p.typeface=Typeface.create("monospace",Typeface.BOLD)
         p.isAntiAlias=false;c.drawText(s,x,y,p)
     }
-    fun render(h:HeroState,frame:Int=0,live:Boolean=false,zoom:Float=1f,transitionAge:Int=1000):Bitmap{
+    fun render(h:HeroState,frame:Int=0,live:Boolean=false,zoom:Float=1f,transitionAge:Int=1000,cleanHud:Boolean=false):Bitmap{
         val b=Bitmap.createBitmap(W,H,Bitmap.Config.ARGB_8888)
         val c=Canvas(b)
         val biome=h.biomeId
@@ -44,9 +44,11 @@ object DungeonScene {
         val accent=accents[biome]
         val dark=if(h.theme==1)0xFF0B121C.toInt() else if(h.theme==2)0xFF182A2C.toInt() else 0xFF10141D.toInt()
         c.drawColor(dark)
-        block(c,0f,0f,320f,17f,0xFF0A1119.toInt())
-        txt(c,"F"+h.floor+"  "+h.biome.uppercase().take(20),9f,12f,10f,accent)
-        txt(c,"R"+h.room+"/8",273f,12f,10f,0xFFE1DCC9.toInt())
+        if(!cleanHud){
+            block(c,0f,0f,320f,17f,0xFF0A1119.toInt())
+            txt(c,"F"+h.floor+"  "+h.biome.uppercase().take(20),9f,12f,10f,accent)
+            txt(c,"R"+h.room+"/8",273f,12f,10f,0xFFE1DCC9.toInt())
+        }
         val layout=DungeonMap.get(h.floor,h.room)
         val roomSeed=layout.seed
         for(y in 0 until 11)for(x in 0 until 20){
@@ -279,8 +281,10 @@ object DungeonScene {
         // Tiny ground HP meter, visible within a widget.
         block(c,px-13f,py+11f,26f,3f,0xFF371C25.toInt())
         block(c,px-13f,py+11f,26f*h.hp.coerceAtLeast(0)/h.maxHp.coerceAtLeast(1),3f,0xFF66CB84.toInt())
-        block(c,0f,193f,320f,15f,0xFF0B111A.toInt())
-        txt(c,"HP "+h.hp+"/"+h.maxHp+"   LV "+h.level+"   GOLD "+h.gold,7f,204f,9f,0xFFE6DCC8.toInt())
+        if(!cleanHud){
+            block(c,0f,193f,320f,15f,0xFF0B111A.toInt())
+            txt(c,"HP "+h.hp+"/"+h.maxHp+"   LV "+h.level+"   GOLD "+h.gold,7f,204f,9f,0xFFE6DCC8.toInt())
+        }
         if(zoom<=1.01f && transitionAge>=480)return b
         // Crop only the world. The floor and status information stay legible.
         val result=Bitmap.createBitmap(W,H,Bitmap.Config.ARGB_8888)
@@ -291,10 +295,17 @@ object DungeonScene {
         val sourceHeight=(176f/cameraZoom).toInt().coerceAtLeast(95)
         val left=(px.toInt()-sourceWidth/2).coerceIn(0,W-sourceWidth)
         val top=(py.toInt()-sourceHeight/2).coerceIn(17,193-sourceHeight)
-        out.drawBitmap(b,Rect(0,0,W,17),Rect(0,0,W,17),nearest)
-        out.drawBitmap(b,Rect(left,top,left+sourceWidth,top+sourceHeight),
-            Rect(0,17,W,193),nearest)
-        out.drawBitmap(b,Rect(0,193,W,H),Rect(0,193,W,H),nearest)
+        if(cleanHud){
+            // Keep camera aspect ratio while avoiding duplicated floor/health labels.
+            block(out,0f,0f,W.toFloat(),H.toFloat(),0xFF121B29.toInt())
+            out.drawBitmap(b,Rect(left,top,left+sourceWidth,top+sourceHeight),
+                Rect(0,16,W,192),nearest)
+        }else{
+            out.drawBitmap(b,Rect(0,0,W,17),Rect(0,0,W,17),nearest)
+            out.drawBitmap(b,Rect(left,top,left+sourceWidth,top+sourceHeight),
+                Rect(0,17,W,193),nearest)
+            out.drawBitmap(b,Rect(0,193,W,H),Rect(0,193,W,H),nearest)
+        }
         if(transitionAge<480){
             val remaining=(1f-transitionAge/480f).coerceIn(0f,1f)
             block(out,0f,17f,W.toFloat(),176f,Color.argb((remaining*220).toInt(),8,12,19))
@@ -309,24 +320,27 @@ object DungeonScene {
     // Unobtrusive skill charge and actual explored map, drawn AFTER camera cropping.
     // Do not place it in the home-screen widget, where details would be too small.
     private fun drawHud(c:Canvas,room:RoomLayout,h:HeroState,accent:Int){
-        block(c,6f,20f,88f,17f,0xD4141D28.toInt())
-        txt(c,"НАВЫК",11f,31f,9f,0xFFF0D2A2.toInt())
+        block(c,7f,22f,94f,18f,0xDD152331.toInt())
+        txt(c,"УМЕНИЕ",12f,34f,9f,0xFFEBCF96.toInt())
         for(i in 0..3){
-            block(c,45f+i*11f,26f,8f,5f,
-                if(i<h.abilityMeter)accent else 0xFF49586B.toInt())
+            block(c,54f+i*10.5f,29f,8f,5f,
+                if(i<h.abilityMeter)accent else 0xFF4B5966.toInt())
         }
-        val x0=263f
-        val y0=158f
-        block(c,x0-3,y0-3,52f,31f,0xD2131D2A.toInt())
+        // A larger tactical plan; exit green, current tile gold.
+        val x0=241f
+        val y0=142f
+        block(c,x0-6,y0-7,74f,51f,0xEE121C2B.toInt())
+        block(c,x0-6,y0-7,74f,2f,0xFF546477.toInt())
         for(y in 0..10)for(x in 0..19){
             if(room.isFloor(x,y)){
-                block(c,x0+x*2.2f,y0+y*2.0f,2f,2f,0xFF697788.toInt())
+                block(c,x0+x*3f,y0+y*3f,3f,3f,0xFF74889A.toInt())
             }
         }
         val path=room.path
-        val where=path[h.pathStep.coerceIn(0,path.lastIndex)]
-        block(c,x0+where.x*2.2f-1f,y0+where.y*2.0f-1f,4f,4f,accent)
-        block(c,x0+18*2.2f,y0+8*2f,3f,3f,0xFF9BE6A3.toInt())
+        val current=path[h.pathStep.coerceIn(0,path.lastIndex)]
+        block(c,x0+18*3f,y0+8*3f,4f,4f,0xFF83DA97.toInt())
+        block(c,x0+current.x*3f-1f,y0+current.y*3f-1f,6f,6f,0xFF252E37.toInt())
+        block(c,x0+current.x*3f,y0+current.y*3f,4f,4f,accent)
     }
     private fun bright(c:Int,a:Int)=Color.rgb(
         min(255,Color.red(c)+a),min(255,Color.green(c)+a),min(255,Color.blue(c)+a))
