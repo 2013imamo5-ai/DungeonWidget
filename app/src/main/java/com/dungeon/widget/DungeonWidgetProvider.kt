@@ -48,16 +48,22 @@ class DungeonWidgetProvider:AppWidgetProvider(){
             val tiny=height<115||width<155
             val large=height>210
             val title="⚔ ПОДЗЕМЕЛЬЕ   F"+h.floor+" · "+h.room+"/8"
-            views.setTextViewText(R.id.widgetTitle,title)
+            views.setTextViewText(R.id.widgetTitle,if(tiny)"⚔ ЭТАЖ "+h.floor else title)
             views.setTextViewText(R.id.widgetStatus,"♥ "+h.hp+"/"+h.maxHp+"   ★ "+h.level+"   ◉ "+h.gold+"   🧪 "+h.potions)
             views.setTextViewText(R.id.widgetDetail,
                 if(large) h.biome+"  ·  "+h.log else h.biome+"   ·   "+h.className)
             views.setViewVisibility(R.id.widgetDetail,if(tiny)View.GONE else View.VISIBLE)
+            views.setViewVisibility(R.id.widgetPotion,if(tiny)View.GONE else View.VISIBLE)
+            views.setTextViewTextSize(R.id.widgetTitle,android.util.TypedValue.COMPLEX_UNIT_SP,
+                if(tiny)10f else if(large)15f else 12f)
+            views.setTextViewTextSize(R.id.widgetStatus,android.util.TypedValue.COMPLEX_UNIT_SP,
+                if(tiny)9f else 11f)
             views.setTextViewText(R.id.widgetAction,if(h.paused)"▶ ПУСК" else "Ⅱ ПАУЗА")
             views.setTextViewText(R.id.widgetPotion,"✚ ЗЕЛЬЕ")
             views.setInt(R.id.widgetRoot,"setBackgroundColor",
                 Color.argb(h.opacity*255/100,17,24,34))
-            views.setImageViewBitmap(R.id.widgetScene,DungeonScene.render(h,0,false))
+            views.setImageViewBitmap(R.id.widgetScene,
+                DungeonScene.render(h,0,false,if(tiny)1.60f else if(large)1.28f else 1.43f))
             fun pending(action:String,code:Int):PendingIntent{
                 val intent=Intent(context,DungeonWidgetProvider::class.java).apply{this.action=action}
                 return PendingIntent.getBroadcast(context,code,intent,

@@ -1,6 +1,7 @@
 package com.dungeon.widget
 
 import android.app.Activity
+import android.app.Dialog
 import android.app.AlertDialog
 import android.os.Bundle
 import android.os.Handler
@@ -40,6 +41,10 @@ class MainActivity:Activity(){
     private var lastPageRefresh=0L
     private var state=HeroState()
     private var running=false
+    private var roomEnteredAt=System.currentTimeMillis()
+    private var fullscreenDialog:Dialog?=null
+    private var fullscreenView:ImageView?=null
+    private var fullscreenLabel:TextView?=null
     private fun dp(n:Int)=(n*resources.displayMetrics.density+0.5f).toInt()
     private val gold get()=Color.rgb(239,197,124)
     private val muted get()=Color.rgb(160,172,187)
@@ -104,13 +109,24 @@ class MainActivity:Activity(){
             if(!running||isFinishing)return
             val now=System.currentTimeMillis()
             if(now-lastUpdate>=950L){
+                val beforeFloor=state.floor
+                val beforeRoom=state.room
                 state=DungeonGame.advance(this@MainActivity)
+                if(beforeFloor!=state.floor||beforeRoom!=state.room)roomEnteredAt=now
                 lastUpdate=now
                 updateNumbers()
-                if(page==0||now-lastPageRefresh>=9000L)refreshPage()
+                if(now-lastPageRefresh>=9000L)refreshPage()
             }
-            if(page==0){
-                scene.setImageDrawable(BitmapDrawable(resources,DungeonScene.render(state,frame++,true)).apply{isFilterBitmap=false})
+            val age=(now-roomEnteredAt).coerceAtLeast(0).coerceAtMost(2000).toInt()
+            if(fullscreenDialog?.isShowing==true){
+                fullscreenView?.setImageDrawable(BitmapDrawable(resources,
+                    DungeonScene.render(state,frame++,true,1.58f,age)).apply{isFilterBitmap=false})
+                fullscreenLabel?.text="♥ "+state.hp+"/"+state.maxHp+
+                    "   Уровень "+state.level+"   ·   Этаж "+state.floor+
+                    "\n"+state.log
+            }else if(page==0){
+                scene.setImageDrawable(BitmapDrawable(resources,
+                    DungeonScene.render(state,frame++,true,1.32f,age)).apply{isFilterBitmap=false})
             }
             if(now-lastWidgetRefresh>=12000L){
                 DungeonWidgetProvider.refreshAll(this@MainActivity)
@@ -122,6 +138,7 @@ class MainActivity:Activity(){
     override fun onCreate(savedInstanceState:Bundle?){
         super.onCreate(savedInstanceState)
         state=DungeonGame.advance(this)
+        roomEnteredAt=System.currentTimeMillis()
         window.statusBarColor=base;window.navigationBarColor=base
         window.decorView.systemUiVisibility=0
         root=LinearLayout(this).apply{
@@ -143,9 +160,9 @@ class MainActivity:Activity(){
         scene=ImageView(this).apply{
             scaleType=ImageView.ScaleType.FIT_CENTER
             background=background(0xFF101720.toInt(),0xFF746952.toInt(),13)
-            setOnClickListener{switchPage(0)}
+            setOnClickListener{showFullscreen()}
         }
-        root.addView(scene,LinearLayout.LayoutParams(-1,dp(235)))
+        root.addView(scene,LinearLayout.LayoutParams(-1,dp(255)))
         vitality=text("",16f,ivory,true).apply{gravity=Gravity.CENTER;setPadding(dp(5),dp(10),dp(5),dp(4))}
         root.addView(vitality)
         narration=text("",13f,muted).apply{gravity=Gravity.CENTER;maxLines=2;minLines=2}
@@ -167,6 +184,38 @@ class MainActivity:Activity(){
     }
     override fun onPause(){
         running=false;handler.removeCallbacks(animator);super.onPause()
+    }
+    override fun onDestroy(){
+        fullscreenDialog?.dismiss()
+        super.onDestroy()
+    }
+    private fun showFullscreen(){
+        if(fullscreenDialog?.isShowing==true)return
+        val dialog=Dialog(this,android.R.style.Theme_Black_NoTitleBar_Fullscreen)
+        val container=LinearLayout(this).apply{
+            orientation=LinearLayout.VERTICAL
+            setBackgroundColor(base)
+            setPadding(dp(12),dp(24),dp(12),dp(22))
+        }
+        val hint=text("⚔ ЖИВОЕ ПОДЗЕМЕЛЬЕ",20f,gold,true).apply{gravity=Gravity.CENTER}
+        container.addView(hint)
+        val big=ImageView(this).apply{
+            scaleType=ImageView.ScaleType.FIT_CENTER
+            background=background(0xFF0E1420.toInt(),0xFF735C42.toInt(),12)
+        }
+        container.addView(big,LinearLayout.LayoutParams(-1,0,1f))
+        val label=text("",16f,ivory,true).apply{
+            gravity=Gravity.CENTER;setPadding(dp(10),dp(20),dp(10),dp(16))
+        }
+        container.addView(label)
+        action(container,"✕ ЗАКРЫТЬ БОЛЬШУЮ СЦЕНУ"){dialog.dismiss()}
+        dialog.setContentView(container)
+        dialog.setOnDismissListener{
+            fullscreenDialog=null;fullscreenView=null;fullscreenLabel=null
+        }
+        fullscreenDialog=dialog;fullscreenView=big;fullscreenLabel=label
+        dialog.show()
+        dialog.window?.setLayout(-1,-1)
     }
     private fun updateNumbers(){
         window.statusBarColor=base;window.navigationBarColor=base;root.setBackgroundColor(base)
@@ -214,7 +263,7 @@ class MainActivity:Activity(){
     }
     private fun expedition(){
         card(body,"⚔ АВТОМАТИЧЕСКАЯ ЭКСПЕДИЦИЯ",
-            "Герой сам выбирает путь, открывает сундуки и сражается. При гибели возвращается в лагерь без потери экипировки."){
+            "Герой сам выбирает путь, открывает сундуки и сражается. Коснись сцены выше, чтобы открыть увеличенный режим. При гибели экипировка сохраняется."){
             action(this,if(state.paused)"▶ ПРОДОЛЖИТЬ ИССЛЕДОВАНИЕ" else "Ⅱ ПАУЗА"){change{DungeonGame.toggle(this@MainActivity)}}
             action(this,"✚ Использовать зелье · осталось "+state.potions,state.potions>0&&state.hp<state.maxHp){
                 change{DungeonGame.usePotion(this@MainActivity)}

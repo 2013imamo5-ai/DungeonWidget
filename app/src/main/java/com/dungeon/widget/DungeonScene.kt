@@ -5,6 +5,7 @@ import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.Typeface
+import android.graphics.Rect
 import kotlin.math.sin
 import kotlin.math.max
 import kotlin.math.min
@@ -35,7 +36,7 @@ object DungeonScene {
         p.color=col;p.textSize=size;p.typeface=Typeface.create("monospace",Typeface.BOLD)
         p.isAntiAlias=false;c.drawText(s,x,y,p)
     }
-    fun render(h:HeroState,frame:Int=0,live:Boolean=false):Bitmap{
+    fun render(h:HeroState,frame:Int=0,live:Boolean=false,zoom:Float=1f,transitionAge:Int=1000):Bitmap{
         val b=Bitmap.createBitmap(W,H,Bitmap.Config.ARGB_8888)
         val c=Canvas(b)
         val biome=h.biomeId
@@ -122,16 +123,31 @@ object DungeonScene {
         val target=layout.path[encounter]
         val targetX=target.x*16f+8f
         val targetY=17f+target.y*16f+5f
+        val eventAge=if(live) (System.currentTimeMillis()-h.lastTick).coerceIn(0,1050).toInt() else 1000
+        val combatRoom=h.roomKind=="battle"||h.roomKind=="boss"
+        val battleFinished=h.pathStep>=encounter && h.event in listOf("battle","boss")
+        val impact=battleFinished && h.pathStep==encounter && live && eventAge<930
+        val showEnemy=!combatRoom || !battleFinished || (impact && eventAge<400)
         block(c,targetX-15,targetY+29,33f,4f,0x8A0B0E14.toInt())
         when(h.roomKind){
-            "boss","battle"->enemy(c,targetX,targetY,h,frame,accent)
-            "chest"->chest(c,targetX,targetY,frame)
+            "boss","battle"->if(showEnemy){
+                val knock=if(impact && eventAge>140) (if(frame%4<2) 4f else -4f) else 0f
+                enemy(c,targetX+knock,targetY,h,frame,accent)
+                if(impact && eventAge<270)block(c,targetX-20,targetY-36,40f,56f,0x66FFFFFF)
+            }
+            "chest"->chest(c,targetX,targetY,frame,h.pathStep>=encounter)
             "shrine"->shrine(c,targetX,targetY,frame)
-            "potion"->potion(c,targetX,targetY,frame)
+            "potion"->if(h.pathStep<encounter)potion(c,targetX,targetY,frame)
             "relic","secret"->shrine(c,targetX,targetY,frame)
             "merchant"->merchant(c,targetX,targetY,frame)
             "trap"->trap(c,targetX,targetY)
             else->enemy(c,targetX,targetY,h,frame,accent)
+        }
+        if(combatRoom && h.pathStep in (encounter-4)..(encounter-1)){
+            if(h.roomKind=="boss"){
+                block(c,targetX-22f,targetY-39f,44f,4f,0xFF321820.toInt())
+                block(c,targetX-22f,targetY-39f,44f,4f,0xFFCE6B62.toInt())
+            }
         }
         if(h.roomKind=="boss"&&h.pathStep in (encounter-5)..(encounter-1)){
             txt(c,"!",targetX-3f,targetY-48f,15f,0xFFFF7F72.toInt())
@@ -145,12 +161,37 @@ object DungeonScene {
         val px=(current.x+(next.x-current.x)*ratio)*16f+8f
         val py=17f+(current.y+(next.y-current.y)*ratio)*16f+5f
         val walking=live&&!h.paused && h.recovery==0
+        if(walking&&frame%4==0){
+            dot(c,px-12f,py+14f,0xFF8D9297.toInt(),3f)
+            dot(c,px+10f,py+12f,0xFF5C6A75.toInt(),2f)
+        }
         hero(c,px,py,walking,frame,h.heroClass,accent,h.event=="camp")
-        if(walking&&h.pathStep in (encounter-2)..(encounter+1)&&h.roomKind in listOf("battle","boss")){
+        if(walking && h.pathStep in (encounter-2)..encounter && combatRoom){
             val blade=if(frame%4<2)0xFFFBE1AC.toInt() else 0xFFE8F8FF.toInt()
             block(c,px+11f,py-17f,17f,3f,blade)
             block(c,px+26f,py-20f,3f,12f,blade)
             dot(c,px+28f,py-23f,accent,3f)
+        }
+        if(impact){
+            val elapsed=eventAge.coerceAtLeast(1)
+            val raise=(elapsed/18f).coerceAtMost(30f)
+            if(elapsed<780){
+                val number=if("КРИТ" in h.log) "КРИТ -"+h.lastDamage else "-"+h.lastDamage
+                txt(c,number,targetX-24f,targetY-44f-raise,if("КРИТ" in h.log)13f else 12f,
+                    if("КРИТ" in h.log)0xFFFFCD61.toInt() else 0xFFFF8B76.toInt())
+            }
+            for(i in 0 until 12){
+                val drift=(elapsed/65f).coerceAtMost(14f)
+                val dx=((i*17)%13-6)*drift/6f
+                val dy=((i*11)%11-5)*drift/7f
+                val col=if(i%3==0)0xFFFFE5AF.toInt() else if(i%3==1)0xFFDC7773.toInt() else accent
+                dot(c,targetX+dx,targetY-17f+dy,col,if(i%2==0)3f else 2f)
+            }
+            if(elapsed in 30..300){
+                val length=28f+(elapsed/20f)
+                block(c,targetX-23f,targetY-29f,length,3f,0xFFF3E8D9.toInt())
+                block(c,targetX-18f,targetY-37f,3f,30f,0xFFFCE2AB.toInt())
+            }
         }
         if(h.event=="level"||h.event=="relic"){
             val sparkleX=px+((frame%5)*3)-6
@@ -161,7 +202,29 @@ object DungeonScene {
         block(c,px-13f,py+11f,26f*h.hp.coerceAtLeast(0)/h.maxHp.coerceAtLeast(1),3f,0xFF66CB84.toInt())
         block(c,0f,193f,320f,15f,0xFF0B111A.toInt())
         txt(c,"HP "+h.hp+"/"+h.maxHp+"   LV "+h.level+"   GOLD "+h.gold,7f,204f,9f,0xFFE6DCC8.toInt())
-        return b
+        if(zoom<=1.01f && transitionAge>=480)return b
+        // Crop only the world. The floor and status information stay legible.
+        val result=Bitmap.createBitmap(W,H,Bitmap.Config.ARGB_8888)
+        val out=Canvas(result)
+        val nearest=Paint().apply{isAntiAlias=false;isFilterBitmap=false}
+        val ratio=zoom.coerceIn(1f,1.75f)
+        val sourceWidth=(W/ratio).toInt().coerceAtLeast(180)
+        val sourceHeight=(176f/ratio).toInt().coerceAtLeast(95)
+        val left=(px.toInt()-sourceWidth/2).coerceIn(0,W-sourceWidth)
+        val top=(py.toInt()-sourceHeight/2).coerceIn(17,193-sourceHeight)
+        out.drawBitmap(b,Rect(0,0,W,17),Rect(0,0,W,17),nearest)
+        out.drawBitmap(b,Rect(left,top,left+sourceWidth,top+sourceHeight),
+            Rect(0,17,W,193),nearest)
+        out.drawBitmap(b,Rect(0,193,W,H),Rect(0,193,W,H),nearest)
+        if(transitionAge<480){
+            val remaining=(1f-transitionAge/480f).coerceIn(0f,1f)
+            block(out,0f,17f,W.toFloat(),176f,Color.argb((remaining*220).toInt(),8,12,19))
+            if(remaining>0.28f){
+                txt(out,"КОМНАТА "+h.room,100f,103f,13f,accent)
+            }
+        }
+        b.recycle()
+        return result
     }
     private fun bright(c:Int,a:Int)=Color.rgb(
         min(255,Color.red(c)+a),min(255,Color.green(c)+a),min(255,Color.blue(c)+a))
@@ -250,10 +313,20 @@ object DungeonScene {
             block(c,x-16f,y-38f,25f,3f,0xFFCB6B63.toInt())
         }
     }
-    private fun chest(c:Canvas,x:Float,y:Float,frame:Int){
+    private fun chest(c:Canvas,x:Float,y:Float,frame:Int,opened:Boolean){
         block(c,x-17f,y-7f,34f,24f,0xFF70452E.toInt())
-        block(c,x-17f,y-12f,34f,11f,0xFFAE753F.toInt())
-        block(c,x-13f,y-9f,26f,6f,0xFFE0AC54.toInt())
+        if(opened){
+            block(c,x-17f,y-26f,34f,10f,0xFFAE753F.toInt())
+            block(c,x-13f,y-24f,26f,6f,0xFFE0AC54.toInt())
+            block(c,x-13f,y-8f,26f,8f,0xFFFADE8B.toInt())
+            for(i in 0 until 5){
+                val spread=(i-2)*9f
+                dot(c,x+spread,y-35f+(if(frame%6<3)0f else 3f),0xFFFFE8A0.toInt(),3f)
+            }
+        }else{
+            block(c,x-17f,y-12f,34f,11f,0xFFAE753F.toInt())
+            block(c,x-13f,y-9f,26f,6f,0xFFE0AC54.toInt())
+        }
         block(c,x-4f,y-1f,8f,12f,0xFFE7CC7E.toInt())
         if(frame%12<6)dot(c,x+19f,y-12f,0xFFFFD478.toInt(),3f)
     }
