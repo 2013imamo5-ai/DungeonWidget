@@ -2,9 +2,6 @@ package com.dungeon.widget
 
 import android.app.Activity
 import android.app.AlertDialog
-import android.text.Editable
-import android.text.TextWatcher
-import android.text.InputType
 import android.os.Bundle
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
@@ -12,7 +9,6 @@ import android.view.Gravity
 import android.view.View
 import android.view.WindowInsets
 import android.widget.ImageView
-import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
@@ -23,16 +19,13 @@ class InventoryActivity:Activity(){
     private lateinit var content:LinearLayout
     private lateinit var scroll:ScrollView
     private lateinit var tabs:LinearLayout
-    private lateinit var search:EditText
     private var h=HeroState()
     private var section=0
     private var sortMode=0
     private var filterSlot="all"
     private var filterRarity=-1
     private var focusedSlot="ring"
-    private var quickFilter=0
     private var filtersExpanded=false
-    private var query=""
     private val gold=0xFFEBC383.toInt()
     private val ivory=0xFFF1EFE9.toInt()
     private val faded=0xFFACBCCC.toInt()
@@ -108,26 +101,6 @@ class InventoryActivity:Activity(){
         top.addView(title,LinearLayout.LayoutParams(0,-2,2f))
         gap(root,8)
         tabs=row(root)
-        search=EditText(this).apply{
-            hint="🔎 Поиск по имени или свойству"
-            setSingleLine(true)
-            inputType=InputType.TYPE_CLASS_TEXT
-            setTextColor(ivory);setHintTextColor(faded)
-            textSize=14f
-            setPadding(dp(13),dp(11),dp(13),dp(11))
-            background=round(0xFF253244.toInt(),0xFF56657B.toInt(),11)
-            addTextChangedListener(object:TextWatcher{
-                override fun beforeTextChanged(s:CharSequence?,start:Int,count:Int,after:Int){}
-                override fun onTextChanged(s:CharSequence?,start:Int,before:Int,count:Int){
-                    query=s?.toString()?.trim()?:""
-                    if(::content.isInitialized && section==0)draw()
-                }
-                override fun afterTextChanged(s:Editable?){}
-            })
-        }
-        root.addView(search,LinearLayout.LayoutParams(-1,-2).apply{
-            topMargin=dp(8)
-        })
         scroll=ScrollView(this)
         content=LinearLayout(this).apply{
             orientation=LinearLayout.VERTICAL;setPadding(0,dp(12),0,dp(18))
@@ -149,7 +122,6 @@ class InventoryActivity:Activity(){
     }
     private fun draw(){
         h=DungeonGame.advance(this)
-        if(::search.isInitialized)search.visibility=if(section==0)View.VISIBLE else View.GONE
         tabs.removeAllViews()
         listOf("▤ РЮКЗАК","⛨ ЭКИПИРОВКА","⚒ МАТЕРИАЛЫ").forEachIndexed{idx,name->
             button(tabs,name,1f,section==idx){select(idx)}
@@ -160,15 +132,6 @@ class InventoryActivity:Activity(){
         if(oldScroll>0)scroll.post{scroll.scrollTo(0,oldScroll)}
     }
     private fun bag(){
-        card("РЮКЗАК · "+h.gear.size+"/"+h.inventoryLimit){
-            add(this,"Нажми на предмет, чтобы сравнить, надеть, защитить или разобрать.",12f,faded)
-            gap(this,5)
-            add(this,"🔒 Вручную: "+h.favorites.size+
-                "   ⛨ Надето: "+h.equipment.values.distinct().size+
-                "   ✦ Новых: "+h.newItems.size,12f,gold,true)
-            add(this,"Автозащита редких и комплектных: "+
-                h.gear.count{EquipmentLogic.isProtected(h,it)},11f,faded)
-        }
         if(h.gear.size>=h.inventoryLimit-10){
             card("♻ ОСВОБОДИТЬ МЕСТО"){
                 add(this,"Игра сохранит надетые, избранные, непросмотренные и лучшие вещи каждого типа и комплекта.",12f,faded)
@@ -181,19 +144,6 @@ class InventoryActivity:Activity(){
                     confirmDuplicates(true)
                 }
                 add(this,"Перед разбором появится список предметов и подтверждение.",11f,faded)
-            }
-        }
-        card("БЫСТРЫЙ ОТБОР"){
-            val options=listOf("ВСЕ","НОВЫЕ","ИЗБРАННОЕ","НАДЕТО")
-            val line=row(this)
-            options.forEachIndexed{idx,name->
-                button(line,name,1f,quickFilter==idx){quickFilter=idx;draw()}
-            }
-            if(h.newItems.isNotEmpty()){
-                gap(this,5)
-                button(this,"✓ ОТМЕТИТЬ ВСЁ ПРОСМОТРЕННЫМ"){
-                    change{DungeonGame.markAllViewed(this@InventoryActivity)}
-                }
             }
         }
         card("ФИЛЬТРЫ И СОРТИРОВКА"){
@@ -232,16 +182,7 @@ class InventoryActivity:Activity(){
         }
         val items=h.gear.filter{
             (filterSlot=="all"||it.slot==filterSlot) &&
-                (filterRarity==-1||it.rarity==filterRarity) &&
-                (query.isEmpty()||it.name.contains(query,true)||
-                    it.trait.contains(query,true)||
-                    EquipmentLogic.label(it.slot).contains(query,true)) &&
-                when(quickFilter){
-                    1->it.id in h.newItems
-                    2->it.id in h.favorites
-                    3->it.id in h.equipment.values
-                    else->true
-                }
+                (filterRarity==-1||it.rarity==filterRarity)
         }.let{list->when(sortMode){
             1->list.sortedByDescending{EquipmentLogic.weight(it,h.heroClass)}
             2->list.sortedWith(compareBy<Gear>{it.slot}.thenByDescending{it.rarity})
