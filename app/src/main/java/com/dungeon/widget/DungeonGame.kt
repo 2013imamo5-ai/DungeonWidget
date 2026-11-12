@@ -58,7 +58,7 @@ data class HeroState(
     val setBonus:Int get()=if(gear.filter{equipment.values.contains(it.id)&&it.set>0}.groupingBy{it.set}.eachCount().any{it.value>=2})4 else 0
     val dodge:Int get()=4+(if(heroClass==1)10 else 0)+skillLuck*2
     val crit:Int get()=6+skillLuck*3+(if(heroClass==1)7 else 0)
-    val progress:Int get()=pathStep.coerceIn(0,18)
+    val progress:Int get()=pathStep.coerceAtLeast(0)
     fun asJson()=JSONObject().apply {
         val ints=mapOf("hp" to hp,"level" to level,"xp" to xp,"gold" to gold,
             "floor" to floor,"room" to room,"weapon" to weapon,"armor" to armor,
@@ -98,7 +98,7 @@ data class HeroState(
             h.enemy=o.optString("enemy","Скелет");h.event=o.optString("event","explore")
             h.combo=o.optInt("combo");h.weaponName=o.optString("weaponName","Ржавый меч")
             h.armorName=o.optString("armorName","Кожаный доспех")
-            h.pathStep=o.optInt("pathStep").coerceIn(0,18)
+            h.pathStep=o.optInt("pathStep").coerceIn(0,255)
             h.roomKind=o.optString("roomKind","battle")
             h.heroClass=o.optInt("heroClass").coerceIn(0,2)
             h.skillAttack=o.optInt("skillAttack");h.skillDefense=o.optInt("skillDefense")

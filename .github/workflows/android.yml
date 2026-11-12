@@ -37,10 +37,10 @@ jobs:
       - name: Build permanently signed APK
         run: |
           gradle --no-daemon :app:assembleRelease
-          cp app/build/outputs/apk/release/app-release.apk DungeonWidget-v0.4.1.apk
+          cp app/build/outputs/apk/release/app-release.apk DungeonWidget-v0.4.2.apk
       - name: Publish direct APK
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release view v0.4.1 >/dev/null 2>&1 && gh release delete v0.4.1 --yes || true
-          gh release create v0.4.1 DungeonWidget-v0.4.1.apk --title "Dungeon Widget v0.4.1" --notes "Procedural maze routefinding, hidden chambers, enemy sprite variants, status effects, weapon strengthening, merchant offers, loot sorting. Progress preserved."
+          gh release view v0.4.2 >/dev/null 2>&1 && gh release delete v0.4.2 --yes || true
+          gh release create v0.4.2 DungeonWidget-v0.4.2.apk --title "Dungeon Widget v0.4.2" --notes "Fix dungeon path progress being incorrectly capped at 18 on save load. Hero can now finish long routes and reach the next room. Existing progress preserved."
