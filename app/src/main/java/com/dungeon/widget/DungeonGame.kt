@@ -465,7 +465,7 @@ object DungeonGame{
             h.effectTicks=if(h.effectType=="stun")1 else 3
         }
         h.status=when{
-            "яд" in traits&&Random.nextInt(4)==0->"Яд"
+            effects.poison>0&&Random.nextInt(4)==0->"Яд"
             crit->"Критический удар"
             dodge->"Уклонение"
             powered->"Сильный удар"
