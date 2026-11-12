@@ -7,6 +7,7 @@ import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.graphics.Color
+import android.graphics.Bitmap
 import android.os.Bundle
 import android.view.View
 import android.widget.RemoteViews
@@ -65,8 +66,13 @@ class DungeonWidgetProvider:AppWidgetProvider(){
             views.setTextViewText(R.id.widgetPotion,"✚ ЗЕЛЬЕ")
             views.setInt(R.id.widgetRoot,"setBackgroundColor",
                 Color.argb(h.opacity*255/100,17,24,34))
-            views.setImageViewBitmap(R.id.widgetScene,
-                DungeonScene.render(h,0,false,if(tiny)1.60f else if(large)1.10f else 1.43f))
+            // Widget artwork has its own clean viewport: no duplicated HUD labels.
+            // The full dungeon remains visible in expanded widgets, with no center cropping.
+            val zoom=if(large)1f else if(tiny)1.35f else 1.22f
+            val sceneBitmap=DungeonScene.render(h,0,false,zoom)
+            val widgetBitmap=Bitmap.createBitmap(sceneBitmap,0,17,320,176)
+            views.setImageViewBitmap(R.id.widgetScene,widgetBitmap)
+            sceneBitmap.recycle()
             fun pending(action:String,code:Int):PendingIntent{
                 val intent=Intent(context,DungeonWidgetProvider::class.java).apply{this.action=action}
                 return PendingIntent.getBroadcast(context,code,intent,
