@@ -46,6 +46,12 @@ data class HeroState(
     var theme:Int=0,var opacity:Int=92,var eco:Boolean=false,
     var questDay:String="",var questCount:Int=0,var questClaimed:Boolean=false,
     var offlineReport:String="",var lastReportAt:Long=0,
+    // One compact, persistent 20x11 fog mask for the active room.
+    var exploreRoom:String="",var exploreSeen:String="",var exploreVisited:String="",
+    var exploreCompleted:Int=0,var activeEvent:Int=-1,
+    var exploreX:Int=1,var exploreY:Int=5,
+    var explorePreviousX:Int=1,var explorePreviousY:Int=5,
+    var exploreFacing:Int=2,var exploreAction:String="scout",
     val gear:MutableList<Gear> = mutableListOf(),
     val equipment:MutableMap<String,String> = mutableMapOf(),
     val discovered:MutableSet<String> = mutableSetOf(),
@@ -85,7 +91,11 @@ data class HeroState(
             "enemyHp" to enemyHp,"enemyMaxHp" to enemyMaxHp,
             "battleRound" to battleRound,"incomingDamage" to incomingDamage,
             "abilityMeter" to abilityMeter,"tactic" to tactic,
-            "elitesDefeated" to elitesDefeated,"bossPhase" to bossPhase)
+            "elitesDefeated" to elitesDefeated,"bossPhase" to bossPhase,
+            "exploreCompleted" to exploreCompleted,"activeEvent" to activeEvent,
+            "exploreX" to exploreX,"exploreY" to exploreY,
+            "explorePreviousX" to explorePreviousX,"explorePreviousY" to explorePreviousY,
+            "exploreFacing" to exploreFacing)
         ints.forEach{(k,v)->put(k,v)}
         put("paused",paused);put("lastTick",lastTick);put("log",log)
         put("enemy",enemy);put("event",event);put("weaponName",weaponName)
@@ -95,6 +105,8 @@ data class HeroState(
         put("lastReportAt",lastReportAt);put("effectType",effectType);put("effectTicks",effectTicks)
         put("attackVisual",attackVisual);put("enemyWarning",enemyWarning)
         put("lastAbility",lastAbility);put("elite",elite)
+        put("exploreRoom",exploreRoom);put("exploreSeen",exploreSeen)
+        put("exploreVisited",exploreVisited);put("exploreAction",exploreAction)
         put("lastCritical",lastCritical);put("lastDodge",lastDodge)
         put("autoEquip",autoEquip);put("autoSalvageRarity",autoSalvageRarity)
         put("favorites",JSONArray(favorites.toList()))
@@ -120,7 +132,7 @@ data class HeroState(
             h.enemy=o.optString("enemy","Скелет");h.event=o.optString("event","explore")
             h.combo=o.optInt("combo");h.weaponName=o.optString("weaponName","Ржавый меч")
             h.armorName=o.optString("armorName","Кожаный доспех")
-            h.pathStep=o.optInt("pathStep").coerceIn(0,255)
+            h.pathStep=o.optInt("pathStep").coerceIn(0,9999)
             h.roomKind=o.optString("roomKind","battle")
             h.heroClass=o.optInt("heroClass").coerceIn(0,2)
             h.skillAttack=o.optInt("skillAttack");h.skillDefense=o.optInt("skillDefense")
@@ -135,6 +147,17 @@ data class HeroState(
             h.elite=o.optBoolean("elite")
             h.elitesDefeated=o.optInt("elitesDefeated")
             h.bossPhase=o.optInt("bossPhase")
+            h.exploreRoom=o.optString("exploreRoom","")
+            h.exploreSeen=o.optString("exploreSeen","")
+            h.exploreVisited=o.optString("exploreVisited","")
+            h.exploreCompleted=o.optInt("exploreCompleted")
+            h.activeEvent=o.optInt("activeEvent",-1)
+            h.exploreX=o.optInt("exploreX",1).coerceIn(0,19)
+            h.exploreY=o.optInt("exploreY",5).coerceIn(0,10)
+            h.explorePreviousX=o.optInt("explorePreviousX",h.exploreX).coerceIn(0,19)
+            h.explorePreviousY=o.optInt("explorePreviousY",h.exploreY).coerceIn(0,10)
+            h.exploreFacing=o.optInt("exploreFacing",2).coerceIn(0,3)
+            h.exploreAction=o.optString("exploreAction","scout")
             h.attackVisual=o.optString("attackVisual","slash")
             h.enemyWarning=o.optBoolean("enemyWarning")
             h.lastCritical=o.optBoolean("lastCritical");h.lastDodge=o.optBoolean("lastDodge")
@@ -182,6 +205,10 @@ object DungeonGame{
         listOf("Ледяной дух","Волк","Морозный страж","Лич"))
     private val rarities=listOf("Обычный","Необычный","Редкий","Эпический","Легендарный")
     fun rarityName(i:Int)=rarities[i.coerceIn(0,4)]
+    fun enemyName(biome:Int,variant:Int):String{
+        val pool=enemyPools[biome.coerceIn(0,3)]
+        return pool[(variant and Int.MAX_VALUE)%pool.size]
+    }
     fun stepMillis()=STEP
     @Synchronized fun load(ctx:Context):HeroState=try{
         val raw=ctx.getSharedPreferences(SAVE,Context.MODE_PRIVATE).getString("hero",null)
@@ -196,6 +223,13 @@ object DungeonGame{
     }
     @Synchronized fun advance(ctx:Context):HeroState{
         val h=load(ctx);val now=System.currentTimeMillis();quest(h)
+        val layout=DungeonMap.get(h.floor,h.room)
+        if(h.exploreRoom!=DungeonExploration.key(h)){
+            // v0.9 saves keep all items and levels; only the current room is
+            // reset as it adopts the newly generated v1.0 maze.
+            DungeonExploration.prepare(h,layout)
+            save(ctx,h)
+        }
         if(!h.paused){
             val elapsed=(now-h.lastTick).coerceAtLeast(0)
             val count=(elapsed/STEP).coerceAtMost(82000L).toInt()
@@ -480,6 +514,7 @@ object DungeonGame{
         h.pathStep=0;h.combo=0;h.recovery=4;h.status="";h.effectTicks=0;h.effectType=""
         h.enemyHp=0;h.enemyMaxHp=0;h.battleRound=0;h.enemyWarning=false
         h.elite=false;h.bossPhase=0;h.lastAbility=""
+        h.exploreRoom="";h.activeEvent=-1;h.exploreSeen="";h.exploreVisited=""
         h.potions=max(2,h.potions);h.event="camp"
         h.log="Герой пал! Возвращение в лагерь. Экипировка сохранена"
     }
@@ -508,12 +543,12 @@ object DungeonGame{
             else->"slash"
         }
     }
-    private fun initializeEnemy(h:HeroState){
+    private fun initializeEnemy(h:HeroState,forcedElite:Boolean=false,variant:Int=0){
         val boss=h.roomKind=="boss"
         val enemyName=if(boss){
             listOf("Костяной король","Древний страж","Пепельный титан","Ледяной лич")[h.biomeId]
-        }else enemyPools[h.biomeId].random()
-        h.elite=!boss && Random.nextInt(100)<12
+        }else enemyName(h.biomeId,variant)
+        h.elite=!boss && (forcedElite||Random.nextInt(100)<12)
         h.enemy=if(h.elite)"Элитный "+enemyName else enemyName
         h.enemyMaxHp=if(boss)max(120+h.floor*18,h.attack*6+h.floor*5)
             else if(h.elite)max(70+h.floor*9,h.attack*4+h.floor*3)
@@ -667,64 +702,139 @@ object DungeonGame{
         }
         checkMedals(h)
     }
+    private fun completeRoom(h:HeroState){
+        h.pathStep=0;h.room++;h.roomsCleared++
+        h.activeEvent=-1;h.enemyHp=0;h.enemyMaxHp=0
+        h.exploreRoom=""
+        if(h.room>8){
+            h.room=1;h.floor++
+            h.bestFloor=max(h.bestFloor,h.floor)
+            h.event="stairs";h.log="Спуск на этаж "+h.floor+" · "+h.biome
+        }else{
+            h.event="stairs";h.log="Найдена лестница! Переход в комнату "+h.room
+        }
+        checkMedals(h)
+        // Initialize the next room at its start before the next render.
+        val msg=h.log
+        DungeonExploration.prepare(h,DungeonMap.get(h.floor,h.room))
+        h.log=msg;h.event="stairs"
+    }
+    private fun roomEncounter(h:HeroState,layout:RoomLayout,e:WorldEvent){
+        val fights=e.kind=="enemy"||e.kind=="elite"||e.kind=="boss"
+        if(fights){
+            if(h.activeEvent!=e.id){
+                h.roomKind=if(e.kind=="boss")"boss" else "battle"
+                h.activeEvent=e.id
+                initializeEnemy(h,e.kind=="elite",layout.seed+e.id)
+                h.exploreAction="combat"
+                h.log="Обнаружен "+h.enemy+"!"
+            }
+            combat(h,e.kind=="boss")
+            // Death resets the room key; never mark a dead hero's event as done.
+            if(h.exploreRoom!=DungeonExploration.key(h))return
+            if(h.enemyHp<=0){
+                DungeonExploration.complete(h,e)
+                h.activeEvent=-1
+                h.exploreAction="victory"
+            }
+            return
+        }
+        h.activeEvent=-1
+        h.roomKind=when(e.kind){
+            "cache","breakable"->"chest"
+            else->e.kind
+        }
+        h.exploreAction="loot"
+        if(e.kind=="breakable"){
+            val shards=1+Random.nextInt(2+h.floor/12)
+            h.shards+=shards
+            h.gold+=8+h.floor
+            if(Random.nextInt(100)<35)collect(h,createGear(h))
+            h.event="chest"
+            h.log="Разбиты старые ящики · найдено "+shards+" материалов"
+        }else if(e.kind=="cache"){
+            h.gold+=10+h.floor*2
+            collect(h,createGear(h,Random.nextInt(100)<30))
+            h.event="chest"
+            h.log="Найден тайник в боковом коридоре"
+        }else resolve(h)
+        if(h.exploreRoom!=DungeonExploration.key(h))return
+        DungeonExploration.complete(h,e)
+    }
     fun step(h:HeroState){
         if(h.paused)return
         if(h.recovery>0){
             h.recovery--;h.hp=min(h.maxHp,h.hp+h.maxHp/5)
-            h.event="camp";if(h.recovery==0)h.log="Герой покидает лагерь";return
+            h.event="camp"
+            if(h.recovery==0)h.log="Герой покидает лагерь"
+            return
         }
         if(h.hp*100<=h.maxHp*h.autoPotion && h.potions>0){
             h.potions--;h.hp=min(h.maxHp,h.hp+30+h.level*4)
-            h.event="potion";h.log="Автоматически использовано зелье";return
+            h.event="potion";h.log="Автоматически использовано зелье"
+            return
         }
         if(h.effectTicks>0){
             when(h.effectType){
-                "stun"->{h.effectTicks--;h.status="Оглушение";h.log="Герой оглушён и пропускает шаг";return}
+                "stun"->{
+                    h.effectTicks--;h.status="Оглушение"
+                    h.log="Герой оглушён";return
+                }
                 "poison","bleed","burn"->{
                     if(h.pathStep%4==0){
-                        val hit=(2+h.floor/3).coerceAtLeast(2)
-                        h.hp-=hit;h.effectTicks--
+                        val damage=(2+h.floor/3).coerceAtLeast(2)
+                        h.hp-=damage;h.effectTicks--
                         h.status=when(h.effectType){
-                            "poison"->"Отравление";"bleed"->"Кровотечение";else->"Горение"}
+                            "poison"->"Отравление"
+                            "bleed"->"Кровотечение"
+                            else->"Горение"
+                        }
                         if(h.hp<=0){death(h);return}
                     }
                 }
             }
             if(h.effectTicks<=0)h.effectType=""
         }
-        if(h.pathStep==0){
-            h.roomKind=roomRoll(h);h.event="explore"
-            if(h.roomKind=="boss"||h.roomKind=="battle")initializeEnemy(h)
-            else{
-                h.enemyHp=0;h.enemyMaxHp=0;h.battleRound=0
-                h.enemyWarning=false;h.elite=false;h.lastAbility=""
-            }
-        }
-        val pathLength=DungeonMap.get(h.floor,h.room).path.size
-        val layout=DungeonMap.get(h.floor,h.room)
-        val secretIndex=layout.secret?.let{layout.path.indexOf(it)}?:-1
-        val encounter=if(h.roomKind=="secret"&&secretIndex>0)secretIndex
-            else (pathLength*2/3).coerceAtLeast(8).coerceAtMost(pathLength-2)
-        // Remain at the enemy until the fight ends. This makes encounters visible
-        // for several animation cycles while preserving the exploration route.
-        if((h.roomKind=="boss"||h.roomKind=="battle")&&
-            h.pathStep>=encounter && h.enemyHp>0){
-            combat(h,h.roomKind=="boss")
+        val room=DungeonMap.get(h.floor,h.room)
+        DungeonExploration.prepare(h,room)
+        DungeonExploration.reveal(h,room)
+        val at= DungeonExploration.atEvent(h,room)
+        if(at!=null){
+            h.explorePreviousX=h.exploreX
+            h.explorePreviousY=h.exploreY
+            roomEncounter(h,room,at)
             return
         }
-        h.pathStep++
-        if(h.pathStep==encounter){
-            resolve(h)
-            if(h.event=="camp")return
+        val next=DungeonExploration.next(h,room)?:run{
+            completeRoom(h);return
         }
-        if(h.pathStep>=pathLength-1){
-            h.pathStep=0;h.room++;h.roomsCleared++
-            if(h.room>8){
-                h.room=1;h.floor++;h.bestFloor=max(h.bestFloor,h.floor)
-                h.event="stairs";h.log="Спуск на этаж "+h.floor+" · "+h.biome
-            }
-            checkMedals(h)
+        if(next.x==h.exploreX && next.y==h.exploreY){
+            if(next==room.exit)completeRoom(h)
+            return
         }
+        val fromX=h.exploreX
+        val fromY=h.exploreY
+        h.explorePreviousX=fromX
+        h.explorePreviousY=fromY
+        h.exploreX=next.x
+        h.exploreY=next.y
+        h.exploreFacing=when{
+            next.y<fromY->0
+            next.x>fromX->1
+            next.y>fromY->2
+            else->3
+        }
+        h.pathStep=(h.pathStep+1).coerceAtMost(9999)
+        h.event="explore"
+        DungeonExploration.reveal(h,room)
+        h.log=when(h.exploreAction){
+            "hunt"->"Герой заметил движение впереди"
+            "loot"->"Ищем сокровища в проходах"
+            "exit"->"Обнаружена лестница к следующей комнате"
+            else->"Разведка: "+DungeonExploration.exploredPercent(h,room)+"% карты"
+        }
+        if(next==room.exit && (DungeonExploration.allEventsComplete(h,room) ||
+            h.pathStep>350))completeRoom(h)
     }
     @Synchronized fun importSave(ctx:Context,raw:String):Boolean {
         return try{

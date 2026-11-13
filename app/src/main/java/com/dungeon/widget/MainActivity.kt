@@ -238,9 +238,10 @@ class MainActivity:Activity(){
         val battle=if(state.enemyHp>0){
             "  ·  ⚔ "+state.enemy+" "+state.enemyHp+"/"+state.enemyMaxHp+" HP"
         }else ""
-        narration.text=state.log+"\nКОМНАТА "+state.room+"/8  ·  "+state.className+
-            (if(state.paused)"  ·  ПАУЗА" else "")+
-            (if(state.effectTicks>0)"  ·  "+state.status else "")+battle
+        val map=DungeonMap.get(state.floor,state.room)
+        val explored=DungeonExploration.exploredPercent(state,map)
+        narration.text=state.log+"\nКОМНАТА "+state.room+"/8  ·  Разведано "+explored+"%"+
+            (if(state.paused)"  ·  ПАУЗА" else "")+battle
     }
     private fun buildTabs(){
         tabs.removeAllViews()
@@ -283,7 +284,7 @@ class MainActivity:Activity(){
     }
     private fun expedition(){
         card(body,"⚔ АВТОМАТИЧЕСКАЯ ЭКСПЕДИЦИЯ",
-            "Герой исследует подземелье и проводит несколько ходов в бою. Оружие, броня, шлем, перчатки и сапоги меняют его облик. Коснись сцены для увеличения."){
+            "Герой раскрывает туман войны, ищет неизвестные проходы, врагов и тайники. Мир создаётся заново в каждой комнате; экипировка меняет внешность персонажа."){
             action(this,if(state.paused)"▶ ПРОДОЛЖИТЬ ИССЛЕДОВАНИЕ" else "Ⅱ ПАУЗА"){change{DungeonGame.toggle(this@MainActivity)}}
             action(this,"✚ Использовать зелье · осталось "+state.potions,state.potions>0&&state.hp<state.maxHp){
                 change{DungeonGame.usePotion(this@MainActivity)}
@@ -299,7 +300,11 @@ class MainActivity:Activity(){
                 " · "+(if(state.enemyWarning)"⚠ Сильная атака!" else "Автобой")) 
         }
         card(body,"🗺 ПУТЬ ПО ПОДЗЕМЕЛЬЮ",
-            "Пройдено комнат: "+state.roomsCleared+
+            "Разведано "+DungeonExploration.exploredPercent(state,
+                DungeonMap.get(state.floor,state.room))+"% карты"+
+                " · Обнаружено "+DungeonExploration.seenEvents(state,
+                DungeonMap.get(state.floor,state.room))+" событий"+
+                "\nПройдено комнат: "+state.roomsCleared+
                 "   ·   Лучшая глубина: "+state.bestFloor+
                 "\nУбито врагов: "+state.kills+"   ·   Боссов: "+state.bosses+
                 "   ·   Элитных: "+state.elitesDefeated+

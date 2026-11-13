@@ -45,127 +45,122 @@ object DungeonScene {
         val now=System.currentTimeMillis()
         DungeonTerrain.draw(c,layout,biome,floorColor,wallColor)
         DungeonAtmosphere.draw(c,layout,biome,now,live)
-        // A hidden side-chamber appears in some rooms.
-        layout.secret?.let{secret->
-            val sx=secret.x*16f+5f;val sy=secret.y*16f+19f
-            block(c,sx,sy,8f,7f,0xFF9C7F45.toInt())
-            dot(c,sx+2f,sy+2f,0xFFF5D58A.toInt())
+        // Objects are spawned at individual deterministic positions, rather
+        // than having one fixed encounter in every room.
+        val active=layout.events.firstOrNull{it.id==h.activeEvent}
+        for(e in layout.events){
+            if(DungeonExploration.completed(h,e))continue
+            if(!DungeonExploration.seen(h,e.cell.x,e.cell.y))continue
+            val ex=e.cell.x*16f+8f
+            val ey=17f+e.cell.y*16f+5f
+            val isActive=active?.id==e.id
+            block(c,ex-10f,ey+10f,20f,3f,0x7B050B12)
+            when(e.kind){
+                "enemy","elite","boss"->{
+                    if(e.kind=="elite"){
+                        block(c,ex-15f,ey-21f,30f,31f,0x44FFD37A)
+                        dot(c,ex-3f,ey-37f,0xFFFFD781.toInt(),3f)
+                    }
+                    val wobble=if(isActive && live && h.lastDamage>0 &&
+                        now-h.lastTick<300L)3f else 0f
+                    c.save()
+                    c.scale(if(e.kind=="boss")0.74f else 0.64f,
+                        if(e.kind=="boss")0.74f else 0.64f,ex,ey)
+                    enemy(c,ex+wobble,ey,h,frame,accent,
+                        e.kind=="boss",
+                        if(isActive)h.enemy else DungeonGame.enemyName(
+                            h.biomeId,layout.seed+e.id))
+                    c.restore()
+                    if(isActive){
+                        block(c,ex-17f,ey-33f,34f,4f,0xFF46212F.toInt())
+                        val remaining=h.enemyHp.coerceAtLeast(0)
+                        block(c,ex-16f,ey-32f,
+                            32f*remaining/h.enemyMaxHp.coerceAtLeast(1),
+                            2f,if(e.kind=="boss")0xFFFFA66C.toInt()
+                                else 0xFFA7DD89.toInt())
+                        if(h.enemyWarning){
+                            txt(c,"!",ex-3f,ey-40f,15f,0xFFFF7667.toInt())
+                            block(c,ex-16f,ey+13f,32f,2f,0xFFBF5149.toInt())
+                        }
+                        if(h.bossPhase>0&&e.kind=="boss")
+                            txt(c,"II",ex-6f,ey-48f,12f,0xFFFF7B72.toInt())
+                    }
+                }
+                "chest"->{
+                    c.save();c.scale(0.58f,0.58f,ex,ey)
+                    chest(c,ex,ey,frame,false);c.restore()
+                }
+                "cache"->{
+                    block(c,ex-8f,ey-5f,16f,10f,0xFF987048.toInt())
+                    block(c,ex-9f,ey-8f,18f,5f,0xFFBE9A64.toInt())
+                    block(c,ex-2f,ey-6f,4f,8f,0xFFF0D38B.toInt())
+                }
+                "potion"->{
+                    c.save();c.scale(0.57f,0.57f,ex,ey)
+                    potion(c,ex,ey,frame);c.restore()
+                }
+                "shrine","relic","secret"->{
+                    c.save();c.scale(0.55f,0.55f,ex,ey)
+                    shrine(c,ex,ey,frame);c.restore()
+                    if(e.kind=="secret")dot(c,ex+11f,ey-10f,0xFFFFD875.toInt(),3f)
+                }
+                "merchant"->{
+                    c.save();c.scale(0.57f,0.57f,ex,ey)
+                    merchant(c,ex,ey,frame);c.restore()
+                }
+                "trap"->{
+                    c.save();c.scale(0.56f,0.56f,ex,ey)
+                    trap(c,ex,ey);c.restore()
+                }
+                "breakable"->{
+                    block(c,ex-8f,ey-8f,16f,18f,0xFF594D41.toInt())
+                    block(c,ex-9f,ey-6f,18f,3f,0xFF968063.toInt())
+                    block(c,ex-9f,ey+4f,18f,3f,0xFF968063.toInt())
+                    block(c,ex-2f,ey-11f,5f,3f,0xFFC6A97B.toInt())
+                }
+            }
         }
-        // On the home-screen widget show chamber progress; the app already
-        // has a dedicated HUD, so don't hide the actual corridor with a label.
-        if(!cleanHud){
-            block(c,226f,19f,86f,25f,0xD00B121C.toInt())
-            for(i in 0 until 8)block(c,234f+i*9f,26f,6f,8f,
-                if(i<h.room-1)0xFF6EB38C.toInt() else if(i==h.room-1)accent else 0xFF3C4655.toInt())
-        }
-        // Ground shadow of interactive object.
-        val secretIndex=layout.secret?.let{layout.path.indexOf(it)}?:-1
-        val encounter=if(h.roomKind=="secret"&&secretIndex>0)secretIndex
-            else (layout.path.size*2/3).coerceAtLeast(8).coerceAtMost(layout.path.size-2)
-        val target=layout.path[encounter]
+        val target=active?.cell ?: layout.events.firstOrNull{
+            !DungeonExploration.completed(h,it) &&
+            DungeonExploration.seen(h,it.cell.x,it.cell.y)
+        }?.cell ?: layout.exit
         val targetX=target.x*16f+8f
         val targetY=17f+target.y*16f+5f
-        val eventAge=if(live) (System.currentTimeMillis()-h.lastTick).coerceIn(0,1050).toInt() else 1000
-        val combatRoom=h.roomKind=="battle"||h.roomKind=="boss"
-        val fighting=combatRoom&&h.enemyMaxHp>0&&h.pathStep>=encounter
-        val victory=fighting&&h.enemyHp<=0
-        val impact=fighting&&live&&h.lastDamage>0&&
-            h.pathStep in encounter..(encounter+1)
-        val hitAge=if(h.pathStep==encounter)eventAge else 1050+eventAge
-        val showEnemy=!combatRoom||h.enemyHp>0||(victory&&impact&&hitAge<420)
-        block(c,targetX-15,targetY+29,33f,4f,0x8A0B0E14.toInt())
-        when(h.roomKind){
-            "boss","battle"->if(showEnemy){
-                val knock=if(impact && hitAge>140) (if(frame%4<2) 4f else -4f) else 0f
-                if(h.elite){
-                    block(c,targetX-22f,targetY-34f,44f,53f,0x33FFD46D)
-                    for(i in 0..7){
-                        val a=(i*19+frame%11)%31
-                        dot(c,targetX-20f+i*5f,targetY-37f+a,
-                            if(i%2==0)0xFFFFD875.toInt() else 0xFFA5F5FF.toInt(),3f)
-                    }
-                }
-                c.save()
-                c.scale(if(h.roomKind=="boss")0.89f else 0.80f,
-                    if(h.roomKind=="boss")0.89f else 0.80f,targetX,targetY)
-                enemy(c,targetX+knock,targetY,h,frame,accent)
-                c.restore()
-                if(h.elite)txt(c,"ELITE",targetX-20f,targetY-58f,10f,
-                    0xFFF6CD6D.toInt())
-                if(h.roomKind=="boss"&&h.bossPhase>0){
-                    block(c,targetX-26f,targetY-45f,52f,3f,0xFFF55C5A.toInt())
-                    txt(c,"ФАЗА II",targetX-22f,targetY-63f,10f,0xFFFF7D72.toInt())
-                }
-                if(impact && hitAge<350)block(c,targetX-20,targetY-36,40f,56f,0x66FFFFFF)
-                if(h.enemyMaxHp>0){
-                    block(c,targetX-26f,targetY-48f,52f,5f,0xFF431E30.toInt())
-                    block(c,targetX-25f,targetY-47f,
-                        50f*h.enemyHp.coerceAtLeast(0)/h.enemyMaxHp.coerceAtLeast(1),3f,
-                        if(h.roomKind=="boss")0xFFF1A15D.toInt() else 0xFFB4D984.toInt())
-                }
-                if(h.enemyWarning){
-                    for(i in 0..3){
-                        val dx=if(i%2==0)-21f else 18f
-                        val dy=-28f+i*11f
-                        dot(c,targetX+dx,targetY+dy,0xFFFF594A.toInt(),5f)
-                    }
-                    txt(c,"!",targetX-4f,targetY-56f,16f,0xFFFF624E.toInt())
-                }
-            }
-            "chest"->chest(c,targetX,targetY,frame,h.pathStep>=encounter)
-            "shrine"->shrine(c,targetX,targetY,frame)
-            "potion"->if(h.pathStep<encounter)potion(c,targetX,targetY,frame)
-            "relic","secret"->shrine(c,targetX,targetY,frame)
-            "merchant"->merchant(c,targetX,targetY,frame)
-            "trap"->trap(c,targetX,targetY)
-            else->enemy(c,targetX,targetY,h,frame,accent)
-        }
-        if(combatRoom && h.pathStep in (encounter-4)..(encounter-1)){
-            if(h.roomKind=="boss"){
-                block(c,targetX-22f,targetY-39f,44f,4f,0xFF321820.toInt())
-                block(c,targetX-22f,targetY-39f,44f,4f,0xFFCE6B62.toInt())
-            }
-        }
-        if(h.roomKind=="boss"&&h.pathStep in (encounter-5)..(encounter-1)){
-            txt(c,"!",targetX-3f,targetY-48f,15f,0xFFFF7F72.toInt())
-            block(c,targetX-16f,targetY+32f,32f,3f,0xFFC44E44.toInt())
-        }
-        // Actual motion follows the saved BFS path, but the pose is updated
-        // independently of the combat/simulation tick. Do NOT tween through
-        // an enemy while the pathStep is frozen during multiple battle rounds.
-        val index=h.pathStep.coerceIn(0,layout.path.lastIndex)
-        val current=layout.path[index]
-        val next=layout.path[(index+1).coerceAtMost(layout.path.lastIndex)]
-        val combatStop=combatRoom && h.pathStep>=encounter && h.enemyHp>0
-        val stunned=h.effectType=="stun" && h.effectTicks>0
+        val eventAge=if(live)(now-h.lastTick).coerceIn(0L,1050L).toInt() else 1000
+        val combatRoom=active!=null &&
+            (active.kind=="enemy"||active.kind=="elite"||active.kind=="boss")
+        val impact=combatRoom && live && h.lastDamage>0
+        val hitAge=eventAge
+        // Simulated positions are authoritative. Blend only between the
+        // previous and the current adjacent cell after each world tick.
+        val traveling=h.exploreX!=h.explorePreviousX ||
+            h.exploreY!=h.explorePreviousY
+        val inCombat=combatRoom && h.enemyHp>0
         val walking=live && !h.paused && h.recovery==0 &&
-            !combatStop && !stunned &&
-            index<layout.path.lastIndex
+            !inCombat && traveling
         val elapsed=(now-h.lastTick).coerceIn(0L,DungeonGame.stepMillis())
-        val progress=if(walking)elapsed.toFloat()/DungeonGame.stepMillis() else 0f
-        val desiredX=(current.x+(next.x-current.x)*progress)*16f+8f
-        val desiredY=17f+(current.y+(next.y-current.y)*progress)*16f+5f
-        val position=if(live && motion!=null){
+        val progress=if(walking)elapsed.toFloat()/DungeonGame.stepMillis()
+            else 1f
+        val desiredX=(h.explorePreviousX+
+            (h.exploreX-h.explorePreviousX)*progress)*16f+8f
+        val desiredY=17f+(h.explorePreviousY+
+            (h.exploreY-h.explorePreviousY)*progress)*16f+5f
+        val position=if(live&&motion!=null)
             motion.sample(h.floor,h.room,desiredX,desiredY,now)
-        }else Pair(desiredX,desiredY)
+            else Pair(desiredX,desiredY)
         val px=position.first
         val py=position.second
-        if(walking && frame%5==0){
-            dot(c,px-8f,py+11f,0xFF8D9297.toInt(),2f)
-            dot(c,px+7f,py+13f,0xFF5C6A75.toInt(),2f)
+        if(walking&&frame%5==0){
+            dot(c,px-7f,py+11f,0xFF6C777D.toInt(),2f)
+            dot(c,px+7f,py+13f,0xFF435A61.toInt(),2f)
         }
         DungeonAtmosphere.heroShadow(c,px,py,now,walking)
-        // Sprite proportions should not swallow a one-cell-wide corridor.
         c.save()
-        c.scale(0.78f,0.78f,px,py)
+        c.scale(0.70f,0.70f,px,py)
         hero(c,px,py,walking,frame,h,accent,h.event=="camp")
         c.restore()
-        if(walking && h.pathStep in (encounter-2)..encounter && combatRoom){
-            if(impact)weaponFx(c,px,py,targetX,targetY,h,frame,accent)
-            else{
-                dot(c,px+18f,py-16f,accent,3f)
-                dot(c,targetX-18f,targetY-23f,accent,2f)
-            }
+        if(impact){
+            weaponFx(c,px,py,targetX,targetY,h,frame,accent)
         }
         if(impact && h.lastAbility.isNotEmpty() && hitAge<1050){
             val skillColor=when(h.heroClass){
@@ -239,6 +234,8 @@ object DungeonScene {
             val sparkleX=px+((frame%5)*3)-6
             dot(c,sparkleX,py-30f-(frame%3),accent,3f)
         }
+        // Fog overlays the scene, NPCs and treasure before the HUD is drawn.
+        drawFog(c,layout,h)
         // Tiny ground HP meter, visible within a widget.
         block(c,px-13f,py+11f,26f,3f,0xFF371C25.toInt())
         block(c,px-13f,py+11f,26f*h.hp.coerceAtLeast(0)/h.maxHp.coerceAtLeast(1),3f,0xFF66CB84.toInt())
@@ -280,28 +277,61 @@ object DungeonScene {
     }
     // Unobtrusive skill charge and actual explored map, drawn AFTER camera cropping.
     // Do not place it in the home-screen widget, where details would be too small.
-    private fun drawHud(c:Canvas,room:RoomLayout,h:HeroState,accent:Int){
-        block(c,7f,22f,94f,18f,0xDD152331.toInt())
-        txt(c,"УМЕНИЕ",12f,34f,9f,0xFFEBCF96.toInt())
-        for(i in 0..3){
-            block(c,54f+i*10.5f,29f,8f,5f,
-                if(i<h.abilityMeter)accent else 0xFF4B5966.toInt())
-        }
-        // A larger tactical plan; exit green, current tile gold.
-        val x0=241f
-        val y0=142f
-        block(c,x0-6,y0-7,74f,51f,0xEE121C2B.toInt())
-        block(c,x0-6,y0-7,74f,2f,0xFF546477.toInt())
-        for(y in 0..10)for(x in 0..19){
-            if(room.isFloor(x,y)){
-                block(c,x0+x*3f,y0+y*3f,3f,3f,0xFF74889A.toInt())
+    private fun drawFog(c:Canvas,room:RoomLayout,h:HeroState){
+        val at=Tile(h.exploreX,h.exploreY)
+        c.save()
+        c.clipRect(0f,17f,W.toFloat(),193f)
+        for(y in 0 until DungeonMap.HEIGHT)for(x in 0 until DungeonMap.WIDTH){
+            val seen=DungeonExploration.seen(h,x,y)
+            if(!seen){
+                block(c,x*16f,17f+y*16f,16f,16f,0xF20A1019.toInt())
+            }else if(!DungeonExploration.visible(room,at,Tile(x,y))){
+                // Explored places stay readable, but they are not fully lit.
+                block(c,x*16f,17f+y*16f,16f,16f,0xAD08101A.toInt())
+            }else{
+                // Outer edge of active sight is a soft pixelated penumbra.
+                val dx=x-at.x;val dy=y-at.y
+                if(dx*dx+dy*dy>=12)
+                    block(c,x*16f,17f+y*16f,16f,16f,0x36090F19)
             }
         }
-        val path=room.path
-        val current=path[h.pathStep.coerceIn(0,path.lastIndex)]
-        block(c,x0+18*3f,y0+8*3f,4f,4f,0xFF83DA97.toInt())
-        block(c,x0+current.x*3f-1f,y0+current.y*3f-1f,6f,6f,0xFF252E37.toInt())
-        block(c,x0+current.x*3f,y0+current.y*3f,4f,4f,accent)
+        c.restore()
+    }
+    private fun drawHud(c:Canvas,room:RoomLayout,h:HeroState,accent:Int){
+        block(c,7f,22f,99f,18f,0xDD152331.toInt())
+        txt(c,"УМЕНИЕ",12f,34f,9f,0xFFEBCF96.toInt())
+        for(i in 0..3){
+            block(c,55f+i*11f,29f,8f,5f,
+                if(i<h.abilityMeter)accent else 0xFF4B5966.toInt())
+        }
+        val x0=241f
+        val y0=142f
+        block(c,x0-6f,y0-7f,74f,51f,0xF0141D2A.toInt())
+        block(c,x0-6f,y0-7f,74f,2f,0xFF546477.toInt())
+        for(y in 0 until DungeonMap.HEIGHT)for(x in 0 until DungeonMap.WIDTH){
+            if(DungeonExploration.seen(h,x,y)&&room.isFloor(x,y)){
+                val bright=DungeonExploration.visible(room,
+                    Tile(h.exploreX,h.exploreY),Tile(x,y))
+                block(c,x0+x*3f,y0+y*3f,3f,3f,
+                    if(bright)0xFF98AABE.toInt() else 0xFF405060.toInt())
+            }
+        }
+        for(e in room.events){
+            if(DungeonExploration.completed(h,e) ||
+                !DungeonExploration.seen(h,e.cell.x,e.cell.y))continue
+            block(c,x0+e.cell.x*3f,y0+e.cell.y*3f,3f,3f,
+                if(e.kind=="enemy"||e.kind=="boss"||e.kind=="elite")
+                    0xFFD77D77.toInt() else 0xFFEBC275.toInt())
+        }
+        if(DungeonExploration.seen(h,room.exit.x,room.exit.y)){
+            block(c,x0+room.exit.x*3f,y0+room.exit.y*3f,
+                4f,4f,0xFF82DAA4.toInt())
+        }
+        block(c,x0+h.exploreX*3f-1f,y0+h.exploreY*3f-1f,
+            6f,6f,0xFF18222E.toInt())
+        block(c,x0+h.exploreX*3f,y0+h.exploreY*3f,4f,4f,accent)
+        val percentage=DungeonExploration.exploredPercent(h,room)
+        txt(c,percentage.toString()+"%",x0+2f,y0+44f,8f,0xFFC8D7DE.toInt())
     }
     private fun bright(c:Int,a:Int)=Color.rgb(
         min(255,Color.red(c)+a),min(255,Color.green(c)+a),min(255,Color.blue(c)+a))
@@ -339,6 +369,15 @@ object DungeonScene {
         if(chest!=null){
             block(c,x-13f,y-17f+bob,26f,27f,0xFF302837.toInt())
         }
+        // Cloth cape shifts behind the legs, strengthening class silhouettes.
+        val cape=when(cl){
+            1->0xFF3C6651.toInt()
+            2->0xFF493661.toInt()
+            else->0xFF654348.toInt()
+        }
+        block(c,x-11f,y-13f+bob,22f,29f,cape)
+        block(c,x-9f,y+13f+bob,8f,4f,bright(cape,12))
+        block(c,x+2f,y+13f+bob,8f,4f,bright(cape,7))
         block(c,x-11f,y+2f,9f,11f+leg,bootCol)
         block(c,x+3f,y+2f,9f,11f-leg,bootCol)
         block(c,x-12f,y-17f+bob,24f,24f,chestCol)
@@ -362,6 +401,29 @@ object DungeonScene {
         block(c,x-8f,y-26f+bob,16f,8f,0xFFDDE3DE.toInt())
         block(c,x-7f,y-21f+bob,14f,4f,0xFF1B2636.toInt())
         dot(c,x-2f,y-21f+bob,accent,3f)
+        // 4-directional head details instead of the old always-facing-front mask.
+        when(h.exploreFacing){
+            0->{
+                // Looking away: solid rear helmet with a central engraved ridge.
+                block(c,x-9f,y-27f+bob,18f,12f,helmCol)
+                block(c,x-1f,y-27f+bob,3f,10f,bright(helmCol,32))
+                block(c,x-11f,y-19f+bob,22f,4f,0xFF3D4456.toInt())
+            }
+            1->{
+                block(c,x-7f,y-25f+bob,16f,7f,0xFFD9D5C4.toInt())
+                block(c,x+5f,y-23f+bob,4f,3f,accent)
+                block(c,x-9f,y-21f+bob,10f,3f,0xFF293344.toInt())
+            }
+            3->{
+                block(c,x-9f,y-25f+bob,16f,7f,0xFFD9D5C4.toInt())
+                block(c,x-9f,y-23f+bob,4f,3f,accent)
+                block(c,x,y-21f+bob,9f,3f,0xFF293344.toInt())
+            }
+            else->{
+                dot(c,x-5f,y-23f+bob,0xFFE5EFEF.toInt(),2f)
+                dot(c,x+4f,y-23f+bob,0xFFE5EFEF.toInt(),2f)
+            }
+        }
         val armSwing=if(walk)stride*1.1f else 0f
         block(c,x-18f,y-10f+bob+armSwing,7f,19f,gloveCol)
         block(c,x-16f,y-7f+bob+armSwing,6f,12f,bright(gloveCol,22))
@@ -406,6 +468,15 @@ object DungeonScene {
                 block(c,x+11f,y+7f+bob,10f,3f,0xFFCEAC73.toInt())
             }
         }
+        if(h.exploreAction=="loot"||h.event=="chest"||h.event=="relic"){
+            dot(c,x+24f,y-29f+bob,0xFFF8D479.toInt(),3f)
+            dot(c,x+28f,y-34f+bob,0xFFE9F4E8.toInt(),2f)
+        }
+        if(h.exploreAction=="combat" && h.enemyHp>0 && cl==0){
+            // Braced left-hand shield, readable even after sprite reduction.
+            block(c,x-23f,y-19f+bob,10f,24f,0xFF677F9B.toInt())
+            block(c,x-20f,y-16f+bob,5f,16f,0xFFD4DCE2.toInt())
+        }
         if(camp)block(c,x-13f,y-41f,26f,3f,0xFF81BF9C.toInt())
     }
     private fun weaponFx(c:Canvas,x:Float,y:Float,tx:Float,ty:Float,
@@ -446,9 +517,9 @@ object DungeonScene {
             }
         }
     }
-    private fun enemy(c:Canvas,x:Float,y:Float,h:HeroState,frame:Int,accent:Int){
-        val boss=h.roomKind=="boss"
-        val species=h.enemy.lowercase()
+    private fun enemy(c:Canvas,x:Float,y:Float,h:HeroState,frame:Int,accent:Int,
+        boss:Boolean=h.roomKind=="boss",name:String=h.enemy){
+        val species=name.lowercase()
         if(!boss&&("паук" in species||"волк" in species||"крыса" in species)){
             val beast=if("паук" in species)0xFF8F667F.toInt() else 0xFFA49A8F.toInt()
             block(c,x-16f,y-12f,32f,18f,beast)

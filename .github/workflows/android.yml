@@ -37,10 +37,10 @@ jobs:
       - name: Build permanently signed APK
         run: |
           gradle --no-daemon :app:assembleRelease
-          cp app/build/outputs/apk/release/app-release.apk DungeonWidget-v0.9.0.apk
+          cp app/build/outputs/apk/release/app-release.apk DungeonWidget-v1.0.0.apk
       - name: Publish direct APK
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release view v0.9.0 >/dev/null 2>&1 && gh release delete v0.9.0 --yes || true
-          gh release create v0.9.0 DungeonWidget-v0.9.0.apk --title "Dungeon Widget v0.9.0" --notes "Graphics and movement overhaul: smooth hero path movement and camera, faster live rendering, softer animation, animated biome lighting and particles, detailed stone floor and walls. Auto exploration and existing saves preserved."
+          gh release view v1.0.0 >/dev/null 2>&1 && gh release delete v1.0.0 --yes || true
+          gh release create v1.0.0 DungeonWidget-v1.0.0.apk --title "Dungeon Widget v1.0.0" --notes "New procedural map exploration, fog of war, persistent discovered tiles, randomized enemies and loot, automatic frontier search, smaller directional hero, breakable crates and biome artwork. Saved progress preserved."
