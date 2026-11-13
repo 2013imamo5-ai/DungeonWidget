@@ -122,7 +122,7 @@ class InventoryActivity:Activity(){
         gap(root,8)
         tabs=row(root)
         gamePreview=ImageView(this).apply{
-            scaleType=ImageView.ScaleType.FIT_CENTER
+            scaleType=ImageView.ScaleType.FIT_XY
             background=round(0xFF0D1723.toInt(),0xFF655741.toInt(),10)
             setOnClickListener{finish()}
         }

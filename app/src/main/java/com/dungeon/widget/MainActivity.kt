@@ -171,7 +171,7 @@ class MainActivity:Activity(){
         headline=text("",19f,ivory,true).apply{setPadding(dp(3),dp(2),dp(3),dp(8))}
         root.addView(headline)
         scene=ImageView(this).apply{
-            scaleType=ImageView.ScaleType.FIT_CENTER
+            scaleType=ImageView.ScaleType.FIT_XY
             background=background(0xFF101720.toInt(),0xFF746952.toInt(),13)
             setOnClickListener{showFullscreen()}
         }

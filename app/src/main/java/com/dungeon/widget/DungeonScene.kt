@@ -43,6 +43,26 @@ object DungeonScene {
         }
         val layout=DungeonMap.get(h.floor,h.room)
         val now=System.currentTimeMillis()
+        if(cleanHud){
+            // Continue the masonry above and below the maze so that the
+            // foreground scene fills the entire viewport without letterboxing.
+            // These boundary stones do not disclose any unexplored tiles.
+            for(x in 0 until 20){
+                val xx=x*16f
+                val seam=(x*7+layout.seed)%5
+                val shade=if(seam<2)wallColor else bright(wallColor,13)
+                block(c,xx,0f,16f,17f,shade)
+                block(c,xx,193f,16f,15f,shade)
+                block(c,xx,0f,1f,17f,0xFF090F17.toInt())
+                block(c,xx,193f,1f,15f,0xFF090F17.toInt())
+                block(c,xx+2f,9f,12f,2f,0xFF293344.toInt())
+                block(c,xx+2f,200f,12f,2f,0xFF293344.toInt())
+                if((x+layout.seed)%3==0){
+                    block(c,xx+7f,3f,2f,5f,0xFF364252.toInt())
+                    block(c,xx+10f,196f,3f,3f,0xFF364252.toInt())
+                }
+            }
+        }
         DungeonTerrain.draw(c,layout,biome,floorColor,wallColor)
         DungeonAtmosphere.draw(c,layout,biome,now,live)
         // Objects are spawned at individual deterministic positions, rather
@@ -252,14 +272,17 @@ object DungeonScene {
         val nearest=Paint().apply{isAntiAlias=false;isFilterBitmap=false}
         val cameraZoom=zoom.coerceIn(1f,1.75f)
         val sourceWidth=(W/cameraZoom).toInt().coerceAtLeast(180)
-        val sourceHeight=(176f/cameraZoom).toInt().coerceAtLeast(95)
+        val sourceHeight=(if(cleanHud)H.toFloat() else 176f)
+            .div(cameraZoom).toInt().coerceAtLeast(95)
         val left=(px.toInt()-sourceWidth/2).coerceIn(0,W-sourceWidth)
-        val top=(py.toInt()-sourceHeight/2).coerceIn(17,193-sourceHeight)
+        val top=(py.toInt()-sourceHeight/2).coerceIn(
+            if(cleanHud)0 else 17,
+            if(cleanHud)H-sourceHeight else 193-sourceHeight)
         if(cleanHud){
-            // Keep camera aspect ratio while avoiding duplicated floor/health labels.
-            block(out,0f,0f,W.toFloat(),H.toFloat(),0xFF121B29.toInt())
+            // Identical horizontal and vertical pixel scale; the playable
+            // image now occupies all 208px rather than just 176px.
             out.drawBitmap(b,Rect(left,top,left+sourceWidth,top+sourceHeight),
-                Rect(0,16,W,192),nearest)
+                Rect(0,0,W,H),nearest)
         }else{
             out.drawBitmap(b,Rect(0,0,W,17),Rect(0,0,W,17),nearest)
             out.drawBitmap(b,Rect(left,top,left+sourceWidth,top+sourceHeight),
@@ -273,7 +296,8 @@ object DungeonScene {
                 txt(out,"КОМНАТА "+h.room,100f,103f,13f,accent)
             }
         }
-        if(cleanHud)drawHud(out,layout,h,accent)
+        if(cleanHud)drawHud(out,layout,h,accent,
+            (px-left)*W/sourceWidth,(py-top)*H/sourceHeight)
         b.recycle()
         return result
     }
@@ -301,36 +325,40 @@ object DungeonScene {
         }
         c.restore()
     }
-    private fun drawHud(c:Canvas,room:RoomLayout,h:HeroState,accent:Int){
-        // Polished readable HUD: full-width top strip with two aligned
-        // sections. Gold and crystals never collide with the skill meter.
-        block(c,5f,18f,145f,45f,0xF113202F.toInt())
-        block(c,153f,18f,162f,45f,0xF113202F.toInt())
-        block(c,5f,18f,310f,2f,0xFF5C6875.toInt())
+    private fun drawHud(c:Canvas,room:RoomLayout,h:HeroState,
+        accent:Int,heroScreenX:Float,heroScreenY:Float){
+        // A condensed, high-contrast HUD, set over the real dungeon view.
+        block(c,5f,4f,145f,40f,0xED13202E.toInt())
+        block(c,153f,4f,162f,40f,0xED13202E.toInt())
+        block(c,5f,4f,310f,2f,0xFF6A7785.toInt())
 
-        txt(c,"HP",12f,34f,11f,0xFFEEDAAE.toInt())
-        txt(c,h.hp.toString()+"/"+h.maxHp,35f,34f,12f,
+        txt(c,"HP",12f,19f,11f,0xFFEEDAAE.toInt())
+        txt(c,h.hp.toString()+"/"+h.maxHp,35f,19f,12f,
             0xFFF2F0E9.toInt())
-        block(c,12f,39f,130f,6f,0xFF533C4C.toInt())
+        block(c,12f,24f,130f,6f,0xFF533C4C.toInt())
         val hpWidth=130f*h.hp.coerceIn(0,h.maxHp.coerceAtLeast(1))/
             h.maxHp.coerceAtLeast(1)
-        block(c,12f,39f,hpWidth,6f,when{
+        block(c,12f,24f,hpWidth,6f,when{
             h.hp*100<h.maxHp*30->0xFFF07379.toInt()
             h.hp*100<h.maxHp*60->0xFFF0BA6C.toInt()
             else->0xFF6DCA92.toInt()
         })
-        txt(c,"НАВЫК",12f,57f,9f,0xFFEBCF96.toInt())
+        txt(c,"НАВЫК",12f,39f,9f,0xFFEBCF96.toInt())
         for(i in 0..3){
-            block(c,58f+i*20f,51f,17f,7f,
+            block(c,58f+i*20f,33f,17f,7f,
                 if(i<h.abilityMeter)accent else 0xFF4B5966.toInt())
         }
-        txt(c,"УР. "+h.level,160f,34f,11f,0xFFF0E8D9.toInt())
-        txt(c,"◈ "+h.gems,229f,34f,10f,0xFFCFD8F6.toInt())
-        txt(c,"◉ "+h.gold,160f,53f,12f,0xFFE9C77F.toInt())
+        txt(c,"УР. "+h.level,160f,20f,11f,0xFFF0E8D9.toInt())
+        txt(c,"◈ "+h.gems,229f,20f,10f,0xFFCFD8F6.toInt())
+        txt(c,"◉ "+h.gold,160f,37f,12f,0xFFE9C77F.toInt())
         // Enlarged 20x11 revealed map. Only discovered tiles are plotted.
         val x0=235f
         val y0=146f
         val tile=3.5f
+        // When the hero walks behind the map, make it translucent instead
+        // of covering their silhouette. The markers remain legible.
+        val nearMap=heroScreenX>211f&&heroScreenY>122f
+        c.saveLayerAlpha(225f,133f,316f,193f,if(nearMap)140 else 255)
         block(c,225f,133f,91f,60f,0xF5121F2E.toInt())
         block(c,225f,133f,91f,2f,0xFF718097.toInt())
         for(y in 0 until DungeonMap.HEIGHT)for(x in 0 until DungeonMap.WIDTH){
@@ -359,6 +387,7 @@ object DungeonScene {
         val percentage=DungeonExploration.exploredPercent(h,room)
         txt(c,"КАРТА "+percentage+"%",229f,142f,8f,
             0xFFD6E0E9.toInt())
+        c.restore()
     }
     private fun bright(c:Int,a:Int)=Color.rgb(
         min(255,Color.red(c)+a),min(255,Color.green(c)+a),min(255,Color.blue(c)+a))
