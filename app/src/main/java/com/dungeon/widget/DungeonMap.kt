@@ -144,7 +144,7 @@ object DungeonMap{
             candidates.remove(spot)
             return true
         }
-        if(boss)place("boss") else {
+        if(bosses)place("boss") else {
             place(if(rng.nextInt(100)<18)"elite" else "enemy")
             if(rng.nextInt(100)<75)place("enemy")
         }
