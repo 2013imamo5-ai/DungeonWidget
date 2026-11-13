@@ -271,7 +271,7 @@ object DungeonScene {
                 txt(out,"КОМНАТА "+h.room,100f,103f,13f,accent)
             }
         }
-        if(live)drawHud(out,layout,h,accent)
+        if(cleanHud)drawHud(out,layout,h,accent)
         b.recycle()
         return result
     }
@@ -298,22 +298,34 @@ object DungeonScene {
         c.restore()
     }
     private fun drawHud(c:Canvas,room:RoomLayout,h:HeroState,accent:Int){
-        block(c,7f,22f,99f,18f,0xDD152331.toInt())
-        txt(c,"УМЕНИЕ",12f,34f,9f,0xFFEBCF96.toInt())
+        // HP now lives in the upper part of the dungeon, not below the scene.
+        block(c,6f,19f,150f,24f,0xE0172331.toInt())
+        txt(c,"♥ "+h.hp+"/"+h.maxHp,11f,31f,10f,0xFFEFE8D7.toInt())
+        block(c,11f,35f,140f,5f,0xFF503A45.toInt())
+        val hpWidth=140f*h.hp.coerceIn(0,h.maxHp.coerceAtLeast(1))/
+            h.maxHp.coerceAtLeast(1)
+        block(c,11f,35f,hpWidth,5f,when{
+            h.hp*100<h.maxHp*30->0xFFF07379.toInt()
+            h.hp*100<h.maxHp*60->0xFFF0BA6C.toInt()
+            else->0xFF6DCA92.toInt()
+        })
+        block(c,164f,19f,82f,24f,0xDE172331.toInt())
+        txt(c,"УМЕНИЕ",169f,30f,9f,0xFFEBCF96.toInt())
         for(i in 0..3){
-            block(c,55f+i*11f,29f,8f,5f,
+            block(c,170f+i*18f,35f,14f,5f,
                 if(i<h.abilityMeter)accent else 0xFF4B5966.toInt())
         }
+
         val x0=241f
         val y0=142f
         block(c,x0-6f,y0-7f,74f,51f,0xF0141D2A.toInt())
         block(c,x0-6f,y0-7f,74f,2f,0xFF546477.toInt())
         for(y in 0 until DungeonMap.HEIGHT)for(x in 0 until DungeonMap.WIDTH){
             if(DungeonExploration.seen(h,x,y)&&room.isFloor(x,y)){
-                val bright=DungeonExploration.visible(room,
+                val lit=DungeonExploration.visible(room,
                     Tile(h.exploreX,h.exploreY),Tile(x,y))
                 block(c,x0+x*3f,y0+y*3f,3f,3f,
-                    if(bright)0xFF98AABE.toInt() else 0xFF405060.toInt())
+                    if(lit)0xFF98AABE.toInt() else 0xFF405060.toInt())
             }
         }
         for(e in room.events){
@@ -324,8 +336,8 @@ object DungeonScene {
                     0xFFD77D77.toInt() else 0xFFEBC275.toInt())
         }
         if(DungeonExploration.seen(h,room.exit.x,room.exit.y)){
-            block(c,x0+room.exit.x*3f,y0+room.exit.y*3f,
-                4f,4f,0xFF82DAA4.toInt())
+            block(c,x0+room.exit.x*3f,y0+room.exit.y*3f,4f,4f,
+                0xFF82DAA4.toInt())
         }
         block(c,x0+h.exploreX*3f-1f,y0+h.exploreY*3f-1f,
             6f,6f,0xFF18222E.toInt())

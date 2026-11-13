@@ -3,6 +3,8 @@ package com.dungeon.widget
 import android.app.Activity
 import android.app.AlertDialog
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.view.Gravity
@@ -19,6 +21,20 @@ class InventoryActivity:Activity(){
     private lateinit var content:LinearLayout
     private lateinit var scroll:ScrollView
     private lateinit var tabs:LinearLayout
+    private lateinit var gamePreview:ImageView
+    private val previewHandler=Handler(Looper.getMainLooper())
+    private val previewRunner=object:Runnable{
+        override fun run(){
+            if(isFinishing || !::gamePreview.isInitialized)return
+            h=DungeonGame.advance(this@InventoryActivity)
+            gamePreview.setImageBitmap(DungeonScene.render(
+                h,0,false,1.06f,1000,true))
+            previewHandler.postDelayed(this,1050L)
+        }
+    }
+    private var selectedEquipmentSlot:String?=null
+    private var selectionPane:View?=null
+    private var scrollToSelection=false
     private var h=HeroState()
     private var section=0
     private var sortMode=0
@@ -101,6 +117,14 @@ class InventoryActivity:Activity(){
         top.addView(title,LinearLayout.LayoutParams(0,-2,2f))
         gap(root,8)
         tabs=row(root)
+        gamePreview=ImageView(this).apply{
+            scaleType=ImageView.ScaleType.FIT_CENTER
+            background=round(0xFF0D1723.toInt(),0xFF655741.toInt(),10)
+            setOnClickListener{finish()}
+        }
+        root.addView(gamePreview,LinearLayout.LayoutParams(-1,dp(130)).apply{
+            topMargin=dp(5)
+        })
         scroll=ScrollView(this)
         content=LinearLayout(this).apply{
             orientation=LinearLayout.VERTICAL;setPadding(0,dp(12),0,dp(18))
@@ -111,7 +135,15 @@ class InventoryActivity:Activity(){
     }
     override fun onResume(){
         super.onResume()
-        if(::content.isInitialized){h=DungeonGame.advance(this);draw()}
+        if(::content.isInitialized){
+            h=DungeonGame.advance(this);draw()
+            previewHandler.removeCallbacks(previewRunner)
+            previewHandler.post(previewRunner)
+        }
+    }
+    override fun onPause(){
+        previewHandler.removeCallbacks(previewRunner)
+        super.onPause()
     }
     private fun change(task:()->Boolean){
         if(!task())Toast.makeText(this,"Действие недоступно",Toast.LENGTH_SHORT).show()
@@ -123,29 +155,24 @@ class InventoryActivity:Activity(){
     private fun draw(){
         h=DungeonGame.advance(this)
         tabs.removeAllViews()
-        listOf("▤ РЮКЗАК","⛨ ЭКИПИРОВКА","⚒ МАТЕРИАЛЫ").forEachIndexed{idx,name->
+        listOf("▤ РЮКЗАК","⛨ ЭКИПИРОВКА").forEachIndexed{idx,name->
             button(tabs,name,1f,section==idx){select(idx)}
         }
         val oldScroll=scroll.scrollY
         content.removeAllViews()
-        when(section){0->bag();1->equipment();else->materials()}
-        if(oldScroll>0)scroll.post{scroll.scrollTo(0,oldScroll)}
+        selectionPane=null
+        when(section){0->bag();else->equipment()}
+        if(scrollToSelection){
+            scrollToSelection=false
+            val target=selectionPane
+            if(target!=null)scroll.post{
+                scroll.smoothScrollTo(0,(target.top-dp(12)).coerceAtLeast(0))
+            }
+        }else if(oldScroll>0){
+            scroll.post{scroll.scrollTo(0,oldScroll)}
+        }
     }
     private fun bag(){
-        if(h.gear.size>=h.inventoryLimit-10){
-            card("♻ ОСВОБОДИТЬ МЕСТО"){
-                add(this,"Игра сохранит надетые, избранные, непросмотренные и лучшие вещи каждого типа и комплекта.",12f,faded)
-                val common=EquipmentLogic.duplicateCandidates(h,false)
-                val all=EquipmentLogic.duplicateCandidates(h,true)
-                button(this,"ОЧИСТИТЬ ДУБЛИКАТЫ · "+common.size+" (БЕЗ ЛЕГЕНДАРНЫХ)"){
-                    confirmDuplicates(false)
-                }
-                button(this,"ПРОВЕРИТЬ И ЛЕГЕНДАРНЫЕ · "+all.size){
-                    confirmDuplicates(true)
-                }
-                add(this,"Перед разбором появится список предметов и подтверждение.",11f,faded)
-            }
-        }
         card("ФИЛЬТРЫ И СОРТИРОВКА"){
             button(this,if(filtersExpanded)"▴ СВЕРНУТЬ ФИЛЬТРЫ" else "▾ ПОКАЗАТЬ ФИЛЬТРЫ"){
                 filtersExpanded=!filtersExpanded
@@ -228,15 +255,6 @@ class InventoryActivity:Activity(){
                 }
             }
         }
-        card("⚒ БЫСТРЫЙ РАЗБОР"){
-            add(this,"Надетые, избранные, эпические, легендарные и комплектные вещи защищены.",12f,faded)
-            val buttons=row(this)
-            button(buttons,"ДО ★★",1f){confirmBulk(1)}
-            button(buttons,"ДО ★★★",1f){confirmBulk(2)}
-            button(this,"НАДЕТЬ ЛУЧШЕЕ ДЛЯ "+h.className.uppercase()){
-                change{DungeonGame.equipBest(this@InventoryActivity,h.heroClass)}
-            }
-        }
         card("⚙ АВТОМАТИЗАЦИЯ"){
             button(this,if(h.autoEquip)"✓ АВТОЭКИПИРОВКА ВКЛ" else "АВТОЭКИПИРОВКА ВЫКЛ"){
                 change{DungeonGame.changeSettings(this@InventoryActivity,autoGear=!h.autoEquip)}
@@ -274,16 +292,19 @@ class InventoryActivity:Activity(){
                     val item=h.gear.firstOrNull{it.id==h.equipment[slot]}
                     val tile=LinearLayout(this@InventoryActivity).apply{
                         orientation=LinearLayout.VERTICAL;gravity=Gravity.CENTER
-                        background=round(0xFF263244.toInt(),
-                            if(item==null)0xFF566275.toInt() else PixelGearIcon.rarityColor(item.rarity))
+                        background=round(
+                            if(selectedEquipmentSlot==slot)0xFF374657.toInt()
+                            else 0xFF263244.toInt(),
+                            if(selectedEquipmentSlot==slot)gold
+                            else if(item==null)0xFF566275.toInt()
+                            else PixelGearIcon.rarityColor(item.rarity))
                         setPadding(dp(4),dp(8),dp(4),dp(8))
                         setOnClickListener{
                             focusedSlot=slot
-                            if(item!=null)showItem(item.id)
-                            else{
-                                section=0;filterSlot=if(slot=="ring2")"ring" else slot
-                                scroll.scrollTo(0,0);draw()
-                            }
+                            selectedEquipmentSlot=slot
+                            scrollToSelection=true
+                            draw()
+                            // Choice card appears directly below the equipped slots.
                         }
                     }
                     line.addView(tile,LinearLayout.LayoutParams(0,dp(146),1f).apply{
@@ -305,6 +326,73 @@ class InventoryActivity:Activity(){
                     }
                 }
             }
+        }
+        val selected=selectedEquipmentSlot
+        if(selected!=null){
+            val gearSlot=if(selected=="ring2")"ring" else selected
+            val equipped=h.gear.firstOrNull{it.id==h.equipment[selected]}
+            card("⛨ "+EquipmentLogic.label(selected).uppercase()+" · ВЫБРАТЬ ПРЕДМЕТ"){
+                if(equipped!=null){
+                    val worn=row(this)
+                    worn.addView(ImageView(this@InventoryActivity).apply{
+                        setImageBitmap(PixelGearIcon.create(equipped,58))
+                    },LinearLayout.LayoutParams(dp(58),dp(58)))
+                    val desc=LinearLayout(this@InventoryActivity).apply{
+                        orientation=LinearLayout.VERTICAL
+                    }
+                    worn.addView(desc,LinearLayout.LayoutParams(0,-2,1f))
+                    add(desc,equipped.name+" · +"+equipped.power,13f,ivory,true)
+                    add(desc,"Сейчас надето · "+
+                        DungeonGame.rarityName(equipped.rarity),11f,faded)
+                    button(this,"ПОДРОБНОСТИ НАДЕТОГО ПРЕДМЕТА"){
+                        showItem(equipped.id)
+                    }
+                }else{
+                    add(this,"Слот пуст. Выбери подходящее снаряжение.",12f,faded)
+                }
+                gap(this,7)
+                val compatible=h.gear.filter{it.slot==gearSlot}.sortedWith(
+                    compareByDescending<Gear>{
+                        EquipmentLogic.improvement(h,it,selected)
+                    }.thenByDescending{it.rarity}.thenByDescending{it.power}
+                )
+                add(this,"ДОСТУПНО ДЛЯ НАДЕВАНИЯ · "+compatible.size,13f,gold,true)
+                if(compatible.isEmpty()){
+                    add(this,"Подходящих вещей в рюкзаке пока нет.",12f,faded)
+                }
+                compatible.forEach{g->
+                    val score=EquipmentLogic.improvement(h,g,selected)
+                    val wearing=g.id==h.equipment[selected]
+                    val line=row(this)
+                    line.addView(ImageView(this@InventoryActivity).apply{
+                        setImageBitmap(PixelGearIcon.create(g,45))
+                    },LinearLayout.LayoutParams(dp(45),dp(45)))
+                    val desc=LinearLayout(this@InventoryActivity).apply{
+                        orientation=LinearLayout.VERTICAL
+                    }
+                    line.addView(desc,LinearLayout.LayoutParams(0,-2,1f))
+                    add(desc,g.name,12f,
+                        PixelGearIcon.rarityColor(g.rarity),true)
+                    val comparison=when{
+                        wearing->"✓ НАДЕТО"
+                        score<=-100000->"🔒 ЗАЩИЩЕНО"
+                        score>4->"↑ ЛУЧШЕ +"+score
+                        score<0->"↓ ХУЖЕ "+score
+                        else->"≈ ПОХОЖЕЕ"
+                    }
+                    add(desc,"+"+g.power+" · "+"★".repeat(g.rarity+1)+
+                        " · "+comparison,11f,
+                        if(score>4)0xFF90D8A7.toInt() else faded)
+                    if(!wearing){
+                        button(line,"НАДЕТЬ",0f,score>4){
+                            change{DungeonGame.equip(
+                                this@InventoryActivity,g.id,selected=="ring2")}
+                        }.layoutParams=LinearLayout.LayoutParams(dp(83),-2)
+                    }
+                    gap(this,5)
+                }
+            }
+            selectionPane=content.getChildAt(content.childCount-1)
         }
         card("◈ КОМПЛЕКТЫ"){
             add(this,"2 предмета комплекта: +4 к атаке/защите."+

@@ -173,8 +173,8 @@ class MainActivity:Activity(){
             background=background(0xFF101720.toInt(),0xFF746952.toInt(),13)
             setOnClickListener{showFullscreen()}
         }
-        root.addView(scene,LinearLayout.LayoutParams(-1,dp(255)))
-        vitality=text("",16f,ivory,true).apply{gravity=Gravity.CENTER;setPadding(dp(5),dp(10),dp(5),dp(4))}
+        root.addView(scene,LinearLayout.LayoutParams(-1,dp(265)))
+        vitality=text("",14f,ivory,true).apply{gravity=Gravity.CENTER;setPadding(dp(5),dp(5),dp(5),dp(2))}
         root.addView(vitality)
         narration=text("",13f,muted).apply{gravity=Gravity.CENTER;maxLines=2;minLines=2}
         root.addView(narration)
@@ -234,7 +234,7 @@ class MainActivity:Activity(){
         window.statusBarColor=base;window.navigationBarColor=base;root.setBackgroundColor(base)
         headline.text="ЭТАЖ "+state.floor+"   ·   "+state.biome
         val hearts=if(state.hp*100/maxOf(1,state.maxHp)<30)"🩸" else "♥"
-        vitality.text=hearts+" "+state.hp+"/"+state.maxHp+"    ✦ "+state.level+"    ◈ "+state.gems+"    ◉ "+state.gold
+        vitality.text="✦ УР. "+state.level+"    ◈ "+state.gems+"    ◉ "+state.gold
         val battle=if(state.enemyHp>0){
             "  ·  ⚔ "+state.enemy+" "+state.enemyHp+"/"+state.enemyMaxHp+" HP"
         }else ""
@@ -283,13 +283,38 @@ class MainActivity:Activity(){
         }
     }
     private fun expedition(){
-        card(body,"⚔ АВТОМАТИЧЕСКАЯ ЭКСПЕДИЦИЯ",
-            "Герой раскрывает туман войны, ищет неизвестные проходы, врагов и тайники. Мир создаётся заново в каждой комнате; экипировка меняет внешность персонажа."){
-            action(this,if(state.paused)"▶ ПРОДОЛЖИТЬ ИССЛЕДОВАНИЕ" else "Ⅱ ПАУЗА"){change{DungeonGame.toggle(this@MainActivity)}}
-            action(this,"✚ Использовать зелье · осталось "+state.potions,state.potions>0&&state.hp<state.maxHp){
+        // Both primary controls fit on one row, freeing room for the scene.
+        val controls=LinearLayout(this).apply{
+            orientation=LinearLayout.HORIZONTAL
+            gravity=Gravity.CENTER_VERTICAL
+        }
+        body.addView(controls,LinearLayout.LayoutParams(-1,-2).apply{
+            bottomMargin=dp(9)
+        })
+        val pause=text(if(state.paused)"▶ ПРОДОЛЖИТЬ" else "⏸ ПАУЗА",
+            15f,ivory,true).apply{
+            gravity=Gravity.CENTER
+            setPadding(dp(10),dp(12),dp(10),dp(12))
+            background=background(0xFF2D3A4A.toInt(),0xFFB58A53.toInt(),12)
+            setOnClickListener{change{DungeonGame.toggle(this@MainActivity)}}
+        }
+        controls.addView(pause,LinearLayout.LayoutParams(0,-2,1f).apply{
+            marginEnd=dp(5)
+        })
+        val enabled=state.potions>0&&state.hp<state.maxHp
+        val potion=text("🧪 ЗЕЛЬЕ ×"+state.potions,15f,
+            if(enabled)ivory else muted,true).apply{
+            gravity=Gravity.CENTER
+            setPadding(dp(10),dp(12),dp(10),dp(12))
+            background=background(0xFF2D3A4A.toInt(),0xFF5C7967.toInt(),12)
+            alpha=if(enabled)1f else 0.55f
+            if(enabled)setOnClickListener{
                 change{DungeonGame.usePotion(this@MainActivity)}
             }
         }
+        controls.addView(potion,LinearLayout.LayoutParams(0,-2,1f).apply{
+            marginStart=dp(5)
+        })
         if(state.enemyHp>0){
             val label=if(state.roomKind=="boss")"☠ БОСС" else if(state.elite)"✦ ЭЛИТНЫЙ ВРАГ" else "⚔ СРАЖЕНИЕ"
             card(body,label+" · "+state.enemy,
@@ -381,8 +406,16 @@ class MainActivity:Activity(){
             .setNegativeButton("Отмена",null).show()
     }
     private fun camp(){
+        // Materials and resource explanations now live only in the camp.
+        card(body,"◈ РЕСУРСЫ И МАТЕРИАЛЫ"){
+            addLine(this,"◉ Золото: "+state.gold+
+                "     ◈ Кристаллы: "+state.gems,15f,ivory,true)
+            addLine(this,"⚒ Материалы: "+state.shards,15f,gold,true)
+            addLine(this,"Материалы — разбор снаряжения и найденные ящики."+
+                "\nКристаллы — боссы, реликвии и ежедневные цели.",12f,muted)
+        }
         card(body,"⌂ ЛАГЕРЬ ГЕРОЯ",
-            "Постоянные улучшения сохраняются после смерти. Золото: "+state.gold+" · Материалы: "+state.shards)
+            "Улучшения сохраняются после гибели героя.")
         val improvements=listOf(
             Triple("camp","⛺ Укрепить лагерь · +6 HP",state.camp),
             Triple("forge","⚒ Улучшить кузницу · +2 атаки",state.forge),
@@ -416,6 +449,13 @@ class MainActivity:Activity(){
                 val price=70+state.floor*3+idx*25
                 action(this,item.name+" · +"+item.power+" · "+price+" ЗОЛОТА",
                     state.gold>=price){change{DungeonGame.buyOffer(this@MainActivity,idx)}}
+            }
+        }
+        card(body,"▤ ПОСЛЕДНИЕ НАХОДКИ"){
+            if(state.lootHistory.isEmpty())
+                addLine(this,"Пока находок нет.",12f,muted)
+            else state.lootHistory.take(7).forEach{
+                addLine(this,it,12f,muted)
             }
         }
     }
