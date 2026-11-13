@@ -31,7 +31,9 @@ class InventoryActivity:Activity(){
             h=DungeonGame.advance(this@InventoryActivity)
             gamePreview.setImageBitmap(DungeonScene.render(
                 h,previewFrame++,true,1.06f,1000,true,previewMotion))
-            previewHandler.postDelayed(this,300L)
+            // Smooth enough to track walking, without the expensive 20 FPS
+            // loop used by the foreground expedition view.
+            previewHandler.postDelayed(this,180L)
         }
     }
     private var selectedEquipmentSlot:String?=null

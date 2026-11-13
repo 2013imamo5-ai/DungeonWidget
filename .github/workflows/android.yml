@@ -37,10 +37,10 @@ jobs:
       - name: Build permanently signed APK
         run: |
           gradle --no-daemon :app:assembleRelease
-          cp app/build/outputs/apk/release/app-release.apk DungeonWidget-v1.0.2.apk
+          cp app/build/outputs/apk/release/app-release.apk DungeonWidget-v1.0.3.apk
       - name: Publish direct APK
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release view v1.0.2 >/dev/null 2>&1 && gh release delete v1.0.2 --yes || true
-          gh release create v1.0.2 DungeonWidget-v1.0.2.apk --title "Dungeon Widget v1.0.2" --notes "Dungeon view size matching between Loot and Expedition, unified top HUD, smaller hero, opaque fog and focused exploration without empty detours. Progress is preserved."
+          gh release view v1.0.3 >/dev/null 2>&1 && gh release delete v1.0.3 --yes || true
+          gh release create v1.0.3 DungeonWidget-v1.0.3.apk --title "Dungeon Widget v1.0.3" --notes "Polished large readable status HUD, better contrast for explored territory, enlarged tactical minimap, live synchronized exploration statistics, responsive expedition and potion buttons, and smoother in-inventory preview. Save and signing preserved."

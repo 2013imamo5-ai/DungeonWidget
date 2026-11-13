@@ -291,7 +291,7 @@ object DungeonScene {
                 block(c,x*16f,17f+y*16f,16f,16f,0xFF070D17.toInt())
             }else if(!DungeonExploration.visible(room,at,Tile(x,y))){
                 // Explored cells form a very faint memory, not a live view.
-                block(c,x*16f,17f+y*16f,16f,16f,0xE608101A.toInt())
+                block(c,x*16f,17f+y*16f,16f,16f,0xC20A1320.toInt())
             }else{
                 // Outer edge of active sight is a soft pixelated penumbra.
                 val dx=x-at.x;val dy=y-at.y
@@ -302,55 +302,63 @@ object DungeonScene {
         c.restore()
     }
     private fun drawHud(c:Canvas,room:RoomLayout,h:HeroState,accent:Int){
-        // Compact two-column HUD: health at left; level, gems and gold
-        // beside it at right. Keep the skill charge within the same strip.
-        block(c,6f,19f,132f,28f,0xEF172331.toInt())
-        txt(c,"♥ "+h.hp+"/"+h.maxHp,11f,31f,10f,0xFFF0E8D9.toInt())
-        block(c,11f,38f,122f,5f,0xFF4B3948.toInt())
-        val hpWidth=122f*h.hp.coerceIn(0,h.maxHp.coerceAtLeast(1))/
+        // Polished readable HUD: full-width top strip with two aligned
+        // sections. Gold and crystals never collide with the skill meter.
+        block(c,5f,18f,145f,45f,0xF113202F.toInt())
+        block(c,153f,18f,162f,45f,0xF113202F.toInt())
+        block(c,5f,18f,310f,2f,0xFF5C6875.toInt())
+
+        txt(c,"HP",12f,34f,11f,0xFFEEDAAE.toInt())
+        txt(c,h.hp.toString()+"/"+h.maxHp,35f,34f,12f,
+            0xFFF2F0E9.toInt())
+        block(c,12f,39f,130f,6f,0xFF533C4C.toInt())
+        val hpWidth=130f*h.hp.coerceIn(0,h.maxHp.coerceAtLeast(1))/
             h.maxHp.coerceAtLeast(1)
-        block(c,11f,38f,hpWidth,5f,when{
+        block(c,12f,39f,hpWidth,6f,when{
             h.hp*100<h.maxHp*30->0xFFF07379.toInt()
             h.hp*100<h.maxHp*60->0xFFF0BA6C.toInt()
             else->0xFF6DCA92.toInt()
         })
-        block(c,142f,19f,172f,28f,0xEF172331.toInt())
-        txt(c,"✦"+h.level+"  ◈"+h.gems,147f,30f,9f,0xFFF0E8D9.toInt())
-        txt(c,"◉"+h.gold,147f,42f,9f,0xFFEAD0A6.toInt())
-        txt(c,"НАВЫК",257f,29f,8f,0xFFEBCF96.toInt())
+        txt(c,"НАВЫК",12f,57f,9f,0xFFEBCF96.toInt())
         for(i in 0..3){
-            block(c,251f+i*14f,36f,11f,5f,
+            block(c,58f+i*20f,51f,17f,7f,
                 if(i<h.abilityMeter)accent else 0xFF4B5966.toInt())
         }
-
-        val x0=241f
-        val y0=142f
-        block(c,x0-6f,y0-7f,74f,51f,0xF0141D2A.toInt())
-        block(c,x0-6f,y0-7f,74f,2f,0xFF546477.toInt())
+        txt(c,"УР. "+h.level,160f,34f,11f,0xFFF0E8D9.toInt())
+        txt(c,"◈ "+h.gems,229f,34f,10f,0xFFCFD8F6.toInt())
+        txt(c,"◉ "+h.gold,160f,53f,12f,0xFFE9C77F.toInt())
+        // Enlarged 20x11 revealed map. Only discovered tiles are plotted.
+        val x0=235f
+        val y0=146f
+        val tile=3.5f
+        block(c,225f,133f,91f,60f,0xF5121F2E.toInt())
+        block(c,225f,133f,91f,2f,0xFF718097.toInt())
         for(y in 0 until DungeonMap.HEIGHT)for(x in 0 until DungeonMap.WIDTH){
             if(DungeonExploration.seen(h,x,y)&&room.isFloor(x,y)){
                 val lit=DungeonExploration.visible(room,
                     Tile(h.exploreX,h.exploreY),Tile(x,y))
-                block(c,x0+x*3f,y0+y*3f,3f,3f,
-                    if(lit)0xFF98AABE.toInt() else 0xFF405060.toInt())
+                block(c,x0+x*tile,y0+y*tile,tile,tile,
+                    if(lit)0xFFB5C4D6.toInt() else 0xFF586B7E.toInt())
             }
         }
         for(e in room.events){
             if(DungeonExploration.completed(h,e) ||
                 !DungeonExploration.seen(h,e.cell.x,e.cell.y))continue
-            block(c,x0+e.cell.x*3f,y0+e.cell.y*3f,3f,3f,
+            block(c,x0+e.cell.x*tile,y0+e.cell.y*tile,4f,4f,
                 if(e.kind=="enemy"||e.kind=="boss"||e.kind=="elite")
-                    0xFFD77D77.toInt() else 0xFFEBC275.toInt())
+                    0xFFEC867B.toInt() else 0xFFFFD18D.toInt())
         }
         if(DungeonExploration.seen(h,room.exit.x,room.exit.y)){
-            block(c,x0+room.exit.x*3f,y0+room.exit.y*3f,4f,4f,
-                0xFF82DAA4.toInt())
+            block(c,x0+room.exit.x*tile,y0+room.exit.y*tile,5f,5f,
+                0xFF87E2A8.toInt())
         }
-        block(c,x0+h.exploreX*3f-1f,y0+h.exploreY*3f-1f,
-            6f,6f,0xFF18222E.toInt())
-        block(c,x0+h.exploreX*3f,y0+h.exploreY*3f,4f,4f,accent)
+        val heroX=x0+h.exploreX*tile
+        val heroY=y0+h.exploreY*tile
+        block(c,heroX-2f,heroY-2f,8f,8f,0xFF0E1724.toInt())
+        block(c,heroX,heroY,5f,5f,accent)
         val percentage=DungeonExploration.exploredPercent(h,room)
-        txt(c,percentage.toString()+"%",x0+2f,y0+44f,8f,0xFFC8D7DE.toInt())
+        txt(c,"КАРТА "+percentage+"%",229f,142f,8f,
+            0xFFD6E0E9.toInt())
     }
     private fun bright(c:Int,a:Int)=Color.rgb(
         min(255,Color.red(c)+a),min(255,Color.green(c)+a),min(255,Color.blue(c)+a))

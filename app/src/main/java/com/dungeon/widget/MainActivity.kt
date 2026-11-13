@@ -32,6 +32,9 @@ class MainActivity:Activity(){
     private lateinit var tabs:LinearLayout
     private lateinit var body:LinearLayout
     private lateinit var details:ScrollView
+    private var expeditionStatsView:TextView?=null
+    private var pauseControl:TextView?=null
+    private var potionControl:TextView?=null
     private var page=0
     private var sortMode=0
     private var frame=0
@@ -227,6 +230,19 @@ class MainActivity:Activity(){
         dialog.show()
         dialog.window?.setLayout(-1,-1)
     }
+    // One source of truth for the expedition stats: avoid stale progress
+    // while the scene and narration keep changing every few hundred ms.
+    private fun expeditionStatsText():String{
+        val map=DungeonMap.get(state.floor,state.room)
+        return "Разведано "+DungeonExploration.exploredPercent(state,map)+"% карты"+
+            " · Обнаружено "+DungeonExploration.seenEvents(state,map)+" событий"+
+            "\nПройдено комнат: "+state.roomsCleared+
+            "   ·   Лучшая глубина: "+state.bestFloor+
+            "\nУбито врагов: "+state.kills+"   ·   Боссов: "+state.bosses+
+            "   ·   Элитных: "+state.elitesDefeated+
+            "\nСундуков: "+state.chests+"   ·   Реликвий: "+state.relics+
+            "\nКритические удары: "+state.crit+"%   ·   Уклонение: "+state.dodge+"%"
+    }
     private fun updateNumbers(){
         window.statusBarColor=base;window.navigationBarColor=base;root.setBackgroundColor(base)
         headline.text="ЭТАЖ "+state.floor+"   ·   "+state.biome
@@ -237,6 +253,14 @@ class MainActivity:Activity(){
         val explored=DungeonExploration.exploredPercent(state,map)
         narration.text=state.log+"\nКОМНАТА "+state.room+"/8  ·  Разведано "+explored+"%"+
             (if(state.paused)"  ·  ПАУЗА" else "")+battle
+        if(page==0){
+            expeditionStatsView?.text=expeditionStatsText()
+            pauseControl?.text=if(state.paused)"▶ ПРОДОЛЖИТЬ" else "⏸ ПАУЗА"
+            potionControl?.let{
+                it.text="🧪 ЗЕЛЬЕ ×"+state.potions
+                it.alpha=if(state.potions>0&&state.hp<state.maxHp)1f else 0.55f
+            }
+        }
     }
     private fun buildTabs(){
         tabs.removeAllViews()
@@ -269,6 +293,9 @@ class MainActivity:Activity(){
         if(!::body.isInitialized)return
         lastPageRefresh=System.currentTimeMillis()
         body.removeAllViews()
+        expeditionStatsView=null
+        pauseControl=null
+        potionControl=null
         when(page){
             0->expedition()
             1->inventory()
@@ -293,6 +320,7 @@ class MainActivity:Activity(){
             background=background(0xFF2D3A4A.toInt(),0xFFB58A53.toInt(),12)
             setOnClickListener{change{DungeonGame.toggle(this@MainActivity)}}
         }
+        pauseControl=pause
         controls.addView(pause,LinearLayout.LayoutParams(0,-2,1f).apply{
             marginEnd=dp(5)
         })
@@ -303,10 +331,13 @@ class MainActivity:Activity(){
             setPadding(dp(10),dp(12),dp(10),dp(12))
             background=background(0xFF2D3A4A.toInt(),0xFF5C7967.toInt(),12)
             alpha=if(enabled)1f else 0.55f
-            if(enabled)setOnClickListener{
-                change{DungeonGame.usePotion(this@MainActivity)}
+            setOnClickListener{
+                if(state.potions>0&&state.hp<state.maxHp){
+                    change{DungeonGame.usePotion(this@MainActivity)}
+                }
             }
         }
+        potionControl=potion
         controls.addView(potion,LinearLayout.LayoutParams(0,-2,1f).apply{
             marginStart=dp(5)
         })
@@ -319,17 +350,9 @@ class MainActivity:Activity(){
                 "\nЗаряд умения: "+state.abilityMeter+"/4"+
                 " · "+(if(state.enemyWarning)"⚠ Сильная атака!" else "Автобой")) 
         }
-        card(body,"🗺 ПУТЬ ПО ПОДЗЕМЕЛЬЮ",
-            "Разведано "+DungeonExploration.exploredPercent(state,
-                DungeonMap.get(state.floor,state.room))+"% карты"+
-                " · Обнаружено "+DungeonExploration.seenEvents(state,
-                DungeonMap.get(state.floor,state.room))+" событий"+
-                "\nПройдено комнат: "+state.roomsCleared+
-                "   ·   Лучшая глубина: "+state.bestFloor+
-                "\nУбито врагов: "+state.kills+"   ·   Боссов: "+state.bosses+
-                "   ·   Элитных: "+state.elitesDefeated+
-                "\nСундуков: "+state.chests+"   ·   Реликвий: "+state.relics+
-                "\nКритические удары: "+state.crit+"%   ·   Уклонение: "+state.dodge+"%")
+        val summaryCard=card(body,"🗺 ПУТЬ ПО ПОДЗЕМЕЛЬЮ",
+            expeditionStatsText())
+        expeditionStatsView=summaryCard.getChildAt(1) as? TextView
         card(body,"◈ ЕЖЕДНЕВНАЯ ЦЕЛЬ",
             "Победить 10 врагов · "+state.questCount.coerceAtMost(10)+"/10\nНаграда: 100 золота и 2 кристалла"){
             action(this,if(state.questClaimed)"✓ НАГРАДА ПОЛУЧЕНА" else "ЗАБРАТЬ НАГРАДУ",
