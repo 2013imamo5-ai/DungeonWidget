@@ -833,8 +833,9 @@ object DungeonGame{
             "exit"->"Обнаружена лестница к следующей комнате"
             else->"Разведка: "+DungeonExploration.exploredPercent(h,room)+"% карты"
         }
-        if(next==room.exit && (DungeonExploration.allEventsComplete(h,room) ||
-            h.pathStep>350))completeRoom(h)
+        // Leaving an empty room should never require visiting all floor tiles.
+        // Discovered threats and loot are prioritized by the planner above.
+        if(next==room.exit)completeRoom(h)
     }
     @Synchronized fun importSave(ctx:Context,raw:String):Boolean {
         return try{

@@ -28,7 +28,6 @@ class MainActivity:Activity(){
     private lateinit var header:TextView
     private lateinit var headline:TextView
     private lateinit var scene:ImageView
-    private lateinit var vitality:TextView
     private lateinit var narration:TextView
     private lateinit var tabs:LinearLayout
     private lateinit var body:LinearLayout
@@ -174,8 +173,6 @@ class MainActivity:Activity(){
             setOnClickListener{showFullscreen()}
         }
         root.addView(scene,LinearLayout.LayoutParams(-1,dp(265)))
-        vitality=text("",14f,ivory,true).apply{gravity=Gravity.CENTER;setPadding(dp(5),dp(5),dp(5),dp(2))}
-        root.addView(vitality)
         narration=text("",13f,muted).apply{gravity=Gravity.CENTER;maxLines=2;minLines=2}
         root.addView(narration)
         gap(root,7)
@@ -233,8 +230,6 @@ class MainActivity:Activity(){
     private fun updateNumbers(){
         window.statusBarColor=base;window.navigationBarColor=base;root.setBackgroundColor(base)
         headline.text="ЭТАЖ "+state.floor+"   ·   "+state.biome
-        val hearts=if(state.hp*100/maxOf(1,state.maxHp)<30)"🩸" else "♥"
-        vitality.text="✦ УР. "+state.level+"    ◈ "+state.gems+"    ◉ "+state.gold
         val battle=if(state.enemyHp>0){
             "  ·  ⚔ "+state.enemy+" "+state.enemyHp+"/"+state.enemyMaxHp+" HP"
         }else ""

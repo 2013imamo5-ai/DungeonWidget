@@ -87,74 +87,62 @@ object DungeonExploration{
     }
     // Target is picked on each game step, not precomputed once for the room.
     // Search only through already revealed traversable cells.
+    // Search follows worthwhile leads, rather than stepping on every
+    // discovered empty tile to reach an arbitrary exploration percentage.
     fun next(h:HeroState,room:RoomLayout):Tile?{
         val from=Tile(h.exploreX,h.exploreY)
-        val start=index(from.x,from.y)
-        // One BFS for every goal in the room: O(20*11) per step instead of
-        // starting a new search for each unvisited floor tile.
-        val distance=IntArray(CELLS){-1}
-        val first=IntArray(CELLS){-1}
-        val queue=java.util.ArrayDeque<Int>()
-        distance[start]=0;first[start]=start;queue.add(start)
-        while(queue.isNotEmpty()){
-            val pos=queue.removeFirst()
-            val cell=Tile(pos%DungeonMap.WIDTH,pos/DungeonMap.WIDTH)
-            for(next in DungeonMap.neighbors(room,cell)){
-                val idx=index(next.x,next.y)
-                if(!seen(h,next.x,next.y)||distance[idx]!=-1)continue
-                distance[idx]=distance[pos]+1
-                first[idx]=if(pos==start)idx else first[pos]
-                queue.addLast(idx)
-            }
-        }
-        fun routeTo(index:Int):Tile?{
-            val step=first.getOrNull(index)?:return null
-            if(step<0)return null
-            return Tile(step%DungeonMap.WIDTH,step/DungeonMap.WIDTH)
-        }
-        val discovered=room.events.filter{
-            !completed(h,it)&&seen(h,it.cell.x,it.cell.y)&&
-                distance[index(it.cell.x,it.cell.y)]>=0
-        }
-        if(discovered.isNotEmpty()){
-            val e=discovered.minWithOrNull(
-                compareBy<WorldEvent>{distance[index(it.cell.x,it.cell.y)]}
-                    .thenBy{it.id})!!
-            h.exploreAction=when(e.kind){
-                "enemy","elite","boss"->"hunt"
-                else->"loot"
-            }
-            return routeTo(index(e.cell.x,e.cell.y))
-        }
-        val pct=exploredPercent(h,room)
-        val exitIndex=index(room.exit.x,room.exit.y)
-        if(allEventsComplete(h,room) && pct>=85 && distance[exitIndex]>=0){
+        if(from==room.exit){
             h.exploreAction="exit"
-            return routeTo(exitIndex)
+            return from
         }
-        var best=-1
-        var score=Int.MAX_VALUE
-        for(y in 1..9)for(x in 1..18){
-            if(!room.isFloor(x,y)||!seen(h,x,y)||visited(h,x,y))continue
-            val i=index(x,y)
-            if(distance[i]<0)continue
-            val frontier=DungeonMap.neighbors(room,Tile(x,y)).any{
-                !seen(h,it.x,it.y)
+        // Actual sightings have absolute priority: enemies first, then loot.
+        val sightings=room.events.asSequence()
+            .filter{!completed(h,it) && seen(h,it.cell.x,it.cell.y)}
+            .mapNotNull{event->
+                val path=DungeonMap.shortest(room,from,event.cell,h.exploreSeen)
+                if(path.isEmpty())null else event to path
             }
-            val point=distance[i]*100+(if(frontier)0 else 20)+
-                ((x*7+y*13+room.seed) and 15)
-            if(point<score){score=point;best=i}
+            .sortedWith(compareBy<Pair<WorldEvent,List<Tile>>>{
+                if(it.first.kind in listOf("enemy","elite","boss"))0 else 1
+            }.thenBy{it.second.size})
+            .firstOrNull()
+        if(sightings!=null){
+            h.exploreAction=if(sightings.first.kind in
+                listOf("enemy","elite","boss"))"hunt" else "loot"
+            return sightings.second.getOrNull(1)?:sightings.second.first()
         }
-        if(best>=0){
+
+        // The stairway is the default objective. A side branch is explored
+        // only if it offers a valuable event with a modest detour; barren
+        // branches are skipped. Unseen encounters never appear on screen.
+        val exitRoute=DungeonMap.shortest(room,from,room.exit)
+        if(exitRoute.isEmpty())return null
+        val possible=room.events.asSequence()
+            .filter{!completed(h,it) && !seen(h,it.cell.x,it.cell.y)}
+            .filter{it.kind in listOf(
+                "boss","elite","chest","cache","relic","secret","shrine","merchant"
+            )}
+            .mapNotNull{event->
+                val approach=DungeonMap.shortest(room,from,event.cell)
+                val onward=DungeonMap.shortest(room,event.cell,room.exit)
+                if(approach.isEmpty()||onward.isEmpty())null else{
+                    val detour=approach.size+onward.size-exitRoute.size-1
+                    Triple(event,approach,detour)
+                }
+            }
+            .filter{(event,approach,detour)->
+                event.kind=="boss" ||
+                    (detour<=6 && approach.size<=18)
+            }
+            .minWithOrNull(compareBy<Triple<WorldEvent,List<Tile>,Int>>{
+                if(it.first.kind=="boss")-1000 else it.third*8+it.second.size
+            }.thenBy{it.first.id})
+        if(possible!=null){
             h.exploreAction="scout"
-            return routeTo(best)
+            return possible.second.getOrNull(1)?:possible.second.first()
         }
-        val route=DungeonMap.shortest(room,from,room.exit)
-        if(route.isNotEmpty()){
-            h.exploreAction="exit"
-            return route.getOrNull(1)?:route.first()
-        }
-        return null
+        h.exploreAction="exit"
+        return exitRoute.getOrNull(1)?:exitRoute.first()
     }
 
 }

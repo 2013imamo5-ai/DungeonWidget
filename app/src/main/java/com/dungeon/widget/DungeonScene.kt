@@ -50,7 +50,9 @@ object DungeonScene {
         val active=layout.events.firstOrNull{it.id==h.activeEvent}
         for(e in layout.events){
             if(DungeonExploration.completed(h,e))continue
-            if(!DungeonExploration.seen(h,e.cell.x,e.cell.y))continue
+            // Only objects inside the actual line of sight may appear on screen.
+            if(!DungeonExploration.visible(layout,
+                Tile(h.exploreX,h.exploreY),e.cell))continue
             val ex=e.cell.x*16f+8f
             val ey=17f+e.cell.y*16f+5f
             val isActive=active?.id==e.id
@@ -156,7 +158,7 @@ object DungeonScene {
         }
         DungeonAtmosphere.heroShadow(c,px,py,now,walking)
         c.save()
-        c.scale(0.70f,0.70f,px,py)
+        c.scale(0.63f,0.63f,px,py)
         hero(c,px,py,walking,frame,h,accent,h.event=="camp")
         c.restore()
         if(impact){
@@ -284,10 +286,12 @@ object DungeonScene {
         for(y in 0 until DungeonMap.HEIGHT)for(x in 0 until DungeonMap.WIDTH){
             val seen=DungeonExploration.seen(h,x,y)
             if(!seen){
-                block(c,x*16f,17f+y*16f,16f,16f,0xF20A1019.toInt())
+                // Unknown territory must be fully opaque, with no wall,
+                // enemy or item silhouettes leaking through the fog.
+                block(c,x*16f,17f+y*16f,16f,16f,0xFF070D17.toInt())
             }else if(!DungeonExploration.visible(room,at,Tile(x,y))){
-                // Explored places stay readable, but they are not fully lit.
-                block(c,x*16f,17f+y*16f,16f,16f,0xAD08101A.toInt())
+                // Explored cells form a very faint memory, not a live view.
+                block(c,x*16f,17f+y*16f,16f,16f,0xE608101A.toInt())
             }else{
                 // Outer edge of active sight is a soft pixelated penumbra.
                 val dx=x-at.x;val dy=y-at.y
@@ -298,21 +302,24 @@ object DungeonScene {
         c.restore()
     }
     private fun drawHud(c:Canvas,room:RoomLayout,h:HeroState,accent:Int){
-        // HP now lives in the upper part of the dungeon, not below the scene.
-        block(c,6f,19f,150f,24f,0xE0172331.toInt())
-        txt(c,"♥ "+h.hp+"/"+h.maxHp,11f,31f,10f,0xFFEFE8D7.toInt())
-        block(c,11f,35f,140f,5f,0xFF503A45.toInt())
-        val hpWidth=140f*h.hp.coerceIn(0,h.maxHp.coerceAtLeast(1))/
+        // Compact two-column HUD: health at left; level, gems and gold
+        // beside it at right. Keep the skill charge within the same strip.
+        block(c,6f,19f,132f,28f,0xEF172331.toInt())
+        txt(c,"♥ "+h.hp+"/"+h.maxHp,11f,31f,10f,0xFFF0E8D9.toInt())
+        block(c,11f,38f,122f,5f,0xFF4B3948.toInt())
+        val hpWidth=122f*h.hp.coerceIn(0,h.maxHp.coerceAtLeast(1))/
             h.maxHp.coerceAtLeast(1)
-        block(c,11f,35f,hpWidth,5f,when{
+        block(c,11f,38f,hpWidth,5f,when{
             h.hp*100<h.maxHp*30->0xFFF07379.toInt()
             h.hp*100<h.maxHp*60->0xFFF0BA6C.toInt()
             else->0xFF6DCA92.toInt()
         })
-        block(c,164f,19f,82f,24f,0xDE172331.toInt())
-        txt(c,"УМЕНИЕ",169f,30f,9f,0xFFEBCF96.toInt())
+        block(c,142f,19f,172f,28f,0xEF172331.toInt())
+        txt(c,"✦"+h.level+"  ◈"+h.gems,147f,30f,9f,0xFFF0E8D9.toInt())
+        txt(c,"◉"+h.gold,147f,42f,9f,0xFFEAD0A6.toInt())
+        txt(c,"НАВЫК",257f,29f,8f,0xFFEBCF96.toInt())
         for(i in 0..3){
-            block(c,170f+i*18f,35f,14f,5f,
+            block(c,251f+i*14f,36f,11f,5f,
                 if(i<h.abilityMeter)accent else 0xFF4B5966.toInt())
         }
 

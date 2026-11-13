@@ -23,13 +23,15 @@ class InventoryActivity:Activity(){
     private lateinit var tabs:LinearLayout
     private lateinit var gamePreview:ImageView
     private val previewHandler=Handler(Looper.getMainLooper())
+    private val previewMotion=DungeonMotion()
+    private var previewFrame=0
     private val previewRunner=object:Runnable{
         override fun run(){
             if(isFinishing || !::gamePreview.isInitialized)return
             h=DungeonGame.advance(this@InventoryActivity)
             gamePreview.setImageBitmap(DungeonScene.render(
-                h,0,false,1.06f,1000,true))
-            previewHandler.postDelayed(this,1050L)
+                h,previewFrame++,true,1.06f,1000,true,previewMotion))
+            previewHandler.postDelayed(this,300L)
         }
     }
     private var selectedEquipmentSlot:String?=null
@@ -122,7 +124,8 @@ class InventoryActivity:Activity(){
             background=round(0xFF0D1723.toInt(),0xFF655741.toInt(),10)
             setOnClickListener{finish()}
         }
-        root.addView(gamePreview,LinearLayout.LayoutParams(-1,dp(130)).apply{
+        // Same visible dungeon viewport height as the expedition tab.
+        root.addView(gamePreview,LinearLayout.LayoutParams(-1,dp(265)).apply{
             topMargin=dp(5)
         })
         scroll=ScrollView(this)
@@ -137,6 +140,7 @@ class InventoryActivity:Activity(){
         super.onResume()
         if(::content.isInitialized){
             h=DungeonGame.advance(this);draw()
+            previewMotion.reset()
             previewHandler.removeCallbacks(previewRunner)
             previewHandler.post(previewRunner)
         }
