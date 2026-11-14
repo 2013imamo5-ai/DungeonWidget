@@ -187,16 +187,20 @@ class MainActivity:Activity(){
         root.addView(details,LinearLayout.LayoutParams(-1,0,1f))
         setContentView(root)
         updateNumbers();buildTabs();refreshPage()
+        UpdateChecker.schedule(this)
         UpdateChecker.check(this)
     }
     override fun onResume(){
         super.onResume();running=true;state=DungeonGame.advance(this)
+        UpdateChecker.onResume(this)
         dungeonMotion.reset()
         lastUpdate=0L;lastNumbers=0L
         handler.removeCallbacks(animator);handler.post(animator)
     }
     override fun onPause(){
-        running=false;handler.removeCallbacks(animator);super.onPause()
+        running=false;handler.removeCallbacks(animator)
+        UpdateChecker.onPause(this)
+        super.onPause()
     }
     override fun onDestroy(){
         fullscreenDialog?.dismiss()
@@ -573,8 +577,28 @@ class MainActivity:Activity(){
                 startActivityForResult(i,102)
             }
         }
-        card(body,"⬇ ОБНОВЛЕНИЯ","Версия приложения и новые APK публикуются на GitHub."){
-            action(this,"ПРОВЕРИТЬ НОВУЮ ВЕРСИЮ"){UpdateChecker.check(this@MainActivity,true)}
+        card(body,"⬇ АВТООБНОВЛЕНИЯ",
+            "Новые версии скачиваются прямо из GitHub автоматически. "+
+            "Работает через Wi-Fi И через мобильный интернет. "+
+            "Android может попросить один раз разрешить установку APK "+
+            "или подтвердить обновление.") {
+            addLine(this,"Версия "+(
+                packageManager.getPackageInfo(packageName,0).versionName
+                ?: "неизвестна"),13f,muted)
+            action(this,
+                "Автоматическая загрузка: "+
+                if(UpdateChecker.enabled(this@MainActivity))"ВКЛ" else "ВЫКЛ"){
+                UpdateChecker.setEnabled(this@MainActivity,
+                    !UpdateChecker.enabled(this@MainActivity))
+                refreshPage()
+            }
+            action(this,"ПРОВЕРИТЬ И ОБНОВИТЬ СЕЙЧАС"){
+                UpdateChecker.check(this@MainActivity,true)
+            }
+            addLine(this,
+                "Проверка при открытии игры и периодически в фоне. "+
+                "Ограничений по типу сети нет. "+
+                "APK проходит проверку подписи перед установкой.",12f,muted)
         }
     }
     @Deprecated("Legacy file picker result")
