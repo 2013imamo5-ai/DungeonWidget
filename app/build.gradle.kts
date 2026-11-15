@@ -9,8 +9,8 @@ android {
         applicationId = "com.dungeon.widget"
         minSdk = 26
         targetSdk = 35
-        versionCode = 27
-        versionName = "1.0.7"
+        versionCode = 28
+        versionName = "1.0.8"
     }
     signingConfigs {
         create("persistent") {

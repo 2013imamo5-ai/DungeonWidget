@@ -64,6 +64,37 @@ object DungeonAtmosphere {
         c.restore()
     }
 
+    /**
+     * Soft 3-layer lantern glow and short-lived footfall dust. It appears
+     * behind the hero and remains subject to normal wall/fog occlusion.
+     */
+    fun heroLight(c:Canvas,x:Float,y:Float,biome:Int,now:Long,walking:Boolean){
+        val color=when(biome){
+            1->intArrayOf(149,224,158)
+            2->intArrayOf(249,157,108)
+            3->intArrayOf(159,224,245)
+            else->intArrayOf(242,199,137)
+        }
+        val flicker=sin(now/360.0).toFloat()
+        c.save()
+        c.clipRect(0f,17f,320f,193f)
+        rect(c,x-21f,y-17f,42f,37f,
+            Color.argb((10+flicker*2).toInt().coerceIn(7,13),
+                color[0],color[1],color[2]))
+        rect(c,x-13f,y-13f,26f,27f,
+            Color.argb((13+flicker*3).toInt().coerceIn(9,17),
+                color[0],color[1],color[2]))
+        rect(c,x-7f,y-9f,14f,17f,
+            Color.argb(11,color[0],color[1],color[2]))
+        if(walking){
+            val phase=(now/170)%4
+            val dx=if(phase<2)-7f else 5f
+            rect(c,x+dx,y+15f,5f,2f,0xA091939A.toInt())
+            rect(c,x+dx+2f,y+13f,2f,2f,0x74969FA1.toInt())
+        }
+        c.restore()
+    }
+
     fun heroShadow(c:Canvas,x:Float,y:Float,now:Long,walking:Boolean){
         val cycle=if(walking)sin(now/155.0).toFloat() else 0f
         rect(c,x-11f+cycle, y+13f,22f,3f,0x75080F1A.toInt())

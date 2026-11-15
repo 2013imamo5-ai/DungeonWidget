@@ -64,6 +64,7 @@ object DungeonScene {
             }
         }
         DungeonTerrain.draw(c,layout,biome,floorColor,wallColor)
+        DungeonDressing.draw(c,layout,biome,now,live)
         DungeonAtmosphere.draw(c,layout,biome,now,live)
         // Objects are spawned at individual deterministic positions, rather
         // than having one fixed encounter in every room.
@@ -84,10 +85,12 @@ object DungeonScene {
                         dot(c,ex-3f,ey-37f,0xFFFFD781.toInt(),3f)
                     }
                     val wobble=if(isActive && live && h.lastDamage>0 &&
-                        now-h.lastTick<300L)3f else 0f
+                        now-h.lastTick<270L)3f else 0f
+                    val breathe=if(live)sin(now/330.0+e.id*1.4).toFloat()*1.4f else 0f
                     c.save()
                     c.scale(if(e.kind=="boss")0.74f else 0.64f,
                         if(e.kind=="boss")0.74f else 0.64f,ex,ey)
+                    c.translate(0f,breathe)
                     enemy(c,ex+wobble,ey,h,frame,accent,
                         e.kind=="boss",
                         if(isActive)h.enemy else DungeonGame.enemyName(
@@ -141,6 +144,9 @@ object DungeonScene {
                     block(c,ex-2f,ey-11f,5f,3f,0xFFC6A97B.toInt())
                 }
             }
+            if(live && e.kind in listOf("chest","cache","potion","relic","secret","shrine")){
+                DungeonDressing.lootGlitter(c,ex,ey,layout.seed+e.id,now)
+            }
         }
         val target=active?.cell ?: layout.events.firstOrNull{
             !DungeonExploration.completed(h,it) &&
@@ -151,7 +157,8 @@ object DungeonScene {
         val eventAge=if(live)(now-h.lastTick).coerceIn(0L,1050L).toInt() else 1000
         val combatRoom=active!=null &&
             (active.kind=="enemy"||active.kind=="elite"||active.kind=="boss")
-        val impact=combatRoom && live && h.lastDamage>0
+        val impact=combatRoom && live && !h.paused &&
+            h.lastDamage>0 && eventAge<830
         val hitAge=eventAge
         // Simulated positions are authoritative. Blend only between the
         // previous and the current adjacent cell after each world tick.
@@ -176,13 +183,14 @@ object DungeonScene {
             dot(c,px-7f,py+11f,0xFF6C777D.toInt(),2f)
             dot(c,px+7f,py+13f,0xFF435A61.toInt(),2f)
         }
+        DungeonAtmosphere.heroLight(c,px,py,biome,now,walking)
         DungeonAtmosphere.heroShadow(c,px,py,now,walking)
         c.save()
         c.scale(0.63f,0.63f,px,py)
         hero(c,px,py,walking,frame,h,accent,h.event=="camp")
         c.restore()
         if(impact){
-            weaponFx(c,px,py,targetX,targetY,h,frame,accent)
+            weaponFx(c,px,py,targetX,targetY,h,eventAge,accent)
         }
         if(impact && h.lastAbility.isNotEmpty() && hitAge<1050){
             val skillColor=when(h.heroClass){
@@ -418,9 +426,11 @@ object DungeonScene {
         val bootCol=gearColor(boots?.rarity?:-1,
             if(cl==1)0xFF4A6756.toInt() else 0xFF414C62.toInt())
         // Continuous stride phase replaces the abrupt 5-pixel leg flip.
-        val stride=if(walk)sin(System.currentTimeMillis()/165.0).toFloat() else 0f
-        val bob=if(walk)kotlin.math.abs(stride)*0.65f else 0f
-        val leg=stride*1.8f
+        val now=System.currentTimeMillis()
+        val stride=if(walk)sin(now/185.0).toFloat() else 0f
+        val bob=if(walk)kotlin.math.abs(stride)*1.15f
+            else sin(now/530.0).toFloat()*0.45f
+        val leg=stride*2.45f
         block(c,x-14f,y+10f,28f,4f,0xAA0B0C10.toInt())
         if(chest!=null){
             block(c,x-13f,y-17f+bob,26f,27f,0xFF302837.toInt())
@@ -480,7 +490,9 @@ object DungeonScene {
                 dot(c,x+4f,y-23f+bob,0xFFE5EFEF.toInt(),2f)
             }
         }
-        val armSwing=if(walk)stride*1.1f else 0f
+        val striking=h.exploreAction=="combat" && h.enemyHp>0 &&
+            now-h.lastTick in 0L..300L
+        val armSwing=if(striking)-3.5f else if(walk)stride*1.6f else 0f
         block(c,x-18f,y-10f+bob+armSwing,7f,19f,gloveCol)
         block(c,x-16f,y-7f+bob+armSwing,6f,12f,bright(gloveCol,22))
         if(gloves!=null)block(c,x-19f,y+3f+bob,9f,6f,gloveCol)
@@ -502,6 +514,10 @@ object DungeonScene {
             else->if(cl==1)"arrow" else if(cl==2)"magic" else "slash"
         }
         val weaponColor=gearColor(h.weaponItem?.rarity?:-1,0xFFCED4D6.toInt())
+        // Held equipment subtly tracks the stride; combat gives a clear
+        // raised-weapon pose without changing the actual saved attack rules.
+        c.save()
+        c.translate(0f,if(striking)-6f else if(walk)stride*1.25f else 0f)
         when(style){
             "arrow"->{
                 block(c,x+15f,y-18f+bob,3f,30f,0xFFD3B58A.toInt())
@@ -524,6 +540,7 @@ object DungeonScene {
                 block(c,x+11f,y+7f+bob,10f,3f,0xFFCEAC73.toInt())
             }
         }
+        c.restore()
         if(h.exploreAction=="loot"||h.event=="chest"||h.event=="relic"){
             dot(c,x+24f,y-29f+bob,0xFFF8D479.toInt(),3f)
             dot(c,x+28f,y-34f+bob,0xFFE9F4E8.toInt(),2f)
@@ -547,7 +564,7 @@ object DungeonScene {
                 txt(c,"!",tx-4f,ty-38f,13f,color)
             }
             "arrow"->{
-                val progress=(frame%8)/7f
+                val progress=(frame/510f).coerceIn(0f,1f)
                 val bx=x+(tx-x)*progress
                 val by=y-10f+(ty-y)*progress
                 block(c,bx,by,17f,3f,0xFFE7EBE1.toInt())
@@ -555,7 +572,7 @@ object DungeonScene {
             }
             "magic"->{
                 for(i in 0..6){
-                    val progress=(i+(frame%6)).toFloat()/12f
+                    val progress=(i/12f+frame/700f).coerceIn(0f,1f)
                     val bx=x+(tx-x)*progress
                     val by=y-18f+(ty-y)*progress
                     dot(c,bx,by,if(i%2==0)color else 0xFFB8F5FF.toInt(),5f)
@@ -576,6 +593,99 @@ object DungeonScene {
     private fun enemy(c:Canvas,x:Float,y:Float,h:HeroState,frame:Int,accent:Int,
         boss:Boolean=h.roomKind=="boss",name:String=h.enemy){
         val species=name.lowercase()
+        // Each biome's common enemies now have distinct silhouettes.
+        // Their position and stats still belong to the original game logic.
+        if(!boss && "скелет" in species){
+            val bone=0xFFDCD8BE.toInt()
+            block(c,x-11f,y-27f,22f,17f,bone)
+            block(c,x-8f,y-18f,6f,6f,0xFF32404E.toInt())
+            block(c,x+3f,y-18f,6f,6f,0xFF32404E.toInt())
+            block(c,x-3f,y-11f,6f,5f,0xFFA18F81.toInt())
+            block(c,x-2f,y-8f,4f,17f,bone)
+            for(i in 0..2){
+                block(c,x-13f,y-6f+i*5f,26f,2f,bone)
+            }
+            block(c,x-13f,y+9f,26f,5f,0xFFBEB79D.toInt())
+            block(c,x-11f,y+14f,5f,12f,bone)
+            block(c,x+6f,y+14f,5f,12f,bone)
+            block(c,x+15f,y-15f,3f,34f,0xFFA7BAC9.toInt())
+            block(c,x+12f,y+10f,9f,3f,0xFFD3B67F.toInt())
+            return
+        }
+        if(!boss && ("споровик" in species || "грибной" in species)){
+            val golem="голем" in species
+            val stem=if(golem)0xFF657E60.toInt() else 0xFF9BC4A2.toInt()
+            val cap=if(golem)0xFF865C85.toInt() else 0xFFB8739C.toInt()
+            block(c,x-12f,y-11f,24f,28f,stem)
+            block(c,x-18f,y-24f,36f,11f,cap)
+            block(c,x-12f,y-30f,24f,7f,bright(cap,21))
+            block(c,x-20f,y-15f,40f,5f,0xFFDBA7BE.toInt())
+            for(i in 0..3){
+                block(c,x-14f+i*9f,y-25f+(i%2)*4f,4f,4f,
+                    0xFFDBD8AF.toInt())
+            }
+            block(c,x-7f,y-4f,5f,4f,0xFF233C37.toInt())
+            block(c,x+3f,y-4f,5f,4f,0xFF233C37.toInt())
+            if(golem){
+                block(c,x-23f,y-7f,9f,21f,stem)
+                block(c,x+14f,y-7f,9f,21f,stem)
+                block(c,x-18f,y+14f,36f,5f,0xFF445946.toInt())
+            }else{
+                block(c,x-13f,y+14f,10f,7f,0xFF5F8369.toInt())
+                block(c,x+4f,y+14f,10f,7f,0xFF5F8369.toInt())
+            }
+            return
+        }
+        if(!boss && ("бес" in species)){
+            val flicker=sin(System.currentTimeMillis()/205.0).toFloat()
+            val flame=0xFFF0935E.toInt()
+            block(c,x-12f,y-12f,24f,28f,0xFF974F4B.toInt())
+            block(c,x-13f,y-25f+flicker,26f,17f,flame)
+            block(c,x-13f,y-36f+flicker,6f,14f,0xFFFFC36A.toInt())
+            block(c,x+7f,y-36f-flicker,6f,14f,0xFFFFC36A.toInt())
+            block(c,x-8f,y-19f,5f,4f,0xFFFFE5AB.toInt())
+            block(c,x+4f,y-19f,5f,4f,0xFFFFE5AB.toInt())
+            block(c,x-19f,y-1f,9f,15f,0xFF7F4249.toInt())
+            block(c,x+10f,y-1f,9f,15f,0xFF7F4249.toInt())
+            block(c,x-9f,y+16f,7f,8f,0xFF633840.toInt())
+            block(c,x+4f,y+16f,7f,8f,0xFF633840.toInt())
+            return
+        }
+        if(!boss && ("страж" in species || "нежить" in species)){
+            val icy="мороз" in species
+            val body=if(icy)0xFF6E9EB6.toInt() else if("пепел" in species)
+                0xFF835652.toInt() else 0xFF6E687F.toInt()
+            val light=if(icy)0xFFD2F5F7.toInt() else 0xFFD0BC9D.toInt()
+            block(c,x-16f,y-16f,32f,33f,body)
+            block(c,x-12f,y-28f,24f,18f,light)
+            block(c,x-10f,y-22f,20f,7f,0xFF283644.toInt())
+            block(c,x-8f,y-21f,5f,3f,0xFFE69172.toInt())
+            block(c,x+4f,y-21f,5f,3f,0xFFE69172.toInt())
+            block(c,x-23f,y-13f,8f,27f,body)
+            block(c,x+15f,y-13f,8f,27f,body)
+            block(c,x-13f,y+17f,10f,10f,0xFF3C4959.toInt())
+            block(c,x+4f,y+17f,10f,10f,0xFF3C4959.toInt())
+            block(c,x+18f,y-28f,4f,48f,light)
+            block(c,x+15f,y-33f,10f,9f,if(icy)0xFF91DDEA.toInt()
+                else 0xFFE3AF88.toInt())
+            if(icy){
+                block(c,x-16f,y-36f,6f,11f,0xFFC5F2FC.toInt())
+                block(c,x+10f,y-36f,6f,11f,0xFFC5F2FC.toInt())
+            }
+            return
+        }
+        if(!boss && "охотник" in species){
+            block(c,x-15f,y-19f,30f,37f,0xFF4B6654.toInt())
+            block(c,x-12f,y-31f,24f,18f,0xFF304C42.toInt())
+            block(c,x-8f,y-22f,16f,7f,0xFFBFBD9A.toInt())
+            block(c,x-6f,y-20f,4f,3f,0xFF252E32.toInt())
+            block(c,x+3f,y-20f,4f,3f,0xFF252E32.toInt())
+            block(c,x-11f,y+14f,8f,12f,0xFF314F41.toInt())
+            block(c,x+3f,y+14f,8f,12f,0xFF314F41.toInt())
+            block(c,x+19f,y-22f,3f,43f,0xFFAE9A79.toInt())
+            block(c,x+16f,y-16f,10f,2f,0xFFE5D6AA.toInt())
+            return
+        }
         if(!boss&&("паук" in species||"волк" in species||"крыса" in species)){
             val beast=if("паук" in species)0xFF8F667F.toInt() else 0xFFA49A8F.toInt()
             block(c,x-16f,y-12f,32f,18f,beast)
