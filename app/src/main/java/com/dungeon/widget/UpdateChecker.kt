@@ -50,6 +50,23 @@ object UpdateChecker {
         ctx.getSharedPreferences(PREFS,Context.MODE_PRIVATE)
 
     fun enabled(ctx:Context)=prefs(ctx).getBoolean("enabled",true)
+    fun status(ctx:Context):String{
+        val p=prefs(ctx)
+        val pending=p.getString("pending_version",null)
+        val result=p.getString("last_status",null)
+        return when{
+            pending!=null && p.getBoolean("retry_confirmation",false)->
+                "Обновление $pending ожидает подтверждения Android"
+            pending!=null->"Обновление $pending скачано"
+            result!=null->result
+            else->"Автообновление включено"
+        }
+    }
+    fun hasPending(ctx:Context)=
+        prefs(ctx).getString("pending_version",null)!=null
+    fun retryPending(activity:Activity){
+        continuePending(activity,true)
+    }
     fun setEnabled(ctx:Context,value:Boolean){
         prefs(ctx).edit().putBoolean("enabled",value).apply()
         schedule(ctx)
@@ -169,7 +186,9 @@ object UpdateChecker {
                         throw SecurityException("Контрольная сумма APK не совпала")
                     }
                 }
-                p.edit().putString("pending_version",latest).apply()
+                p.edit().putString("pending_version",latest)
+                    .putString("last_status","Обновление $latest скачано")
+                    .apply()
                 message(activity,"Обновление $latest скачано. Подготавливаем установку.")
                 if(activity!=null){
                     main.post{
@@ -182,13 +201,16 @@ object UpdateChecker {
                 // If Android needs user interaction, its callback will defer
                 // confirmation until the game is opened again.
                 if(activity==null && ctx.packageManager.canRequestPackageInstalls()
+                    && !p.getBoolean("retry_confirmation",false)
                     && installing.compareAndSet(false,true)){
-                    p.edit().remove("pending_version").apply()
                     try{
-                        install(ctx,apk,latest)
+                        install(ctx,apk,latest,false)
                     }catch(_:Exception){
                         installing.set(false)
-                        p.edit().putString("pending_version",latest).apply()
+                        p.edit().putBoolean("retry_confirmation",true)
+                            .putString("last_status",
+                                "Открой игру для подтверждения установки")
+                            .apply()
                     }
                 }
             }catch(e:Exception){
@@ -272,10 +294,14 @@ object UpdateChecker {
     private fun continuePending(activity:Activity,showPermission:Boolean){
         if(activity.isFinishing||activity.isDestroyed||installing.get())return
         val ctx=activity.applicationContext
-        val version=prefs(ctx).getString("pending_version",null)?:return
+        val p=prefs(ctx)
+        if(!showPermission && p.getBoolean("manual_retry_required",false))return
+        val version=p.getString("pending_version",null)?:return
         val apk=File(ctx.cacheDir,"DungeonWidget-v$version.apk")
         if(!verified(ctx,apk)){
-            prefs(ctx).edit().remove("pending_version").apply()
+            p.edit().remove("pending_version")
+                .remove("retry_confirmation")
+                .remove("manual_retry_required").apply()
             apk.delete()
             return
         }
@@ -308,18 +334,27 @@ object UpdateChecker {
             return
         }
         if(!installing.compareAndSet(false,true))return
-        // Mark as submitted so returning from the OS installer never loops.
-        prefs(ctx).edit().remove("pending_version").apply()
+        // Keep the verified APK and its version until Android confirms success.
+        // After an aborted attempt force a normal system-confirmed retry.
+        val requireConfirmation=p.getBoolean("retry_confirmation",false)
+        p.edit().putBoolean("manual_retry_required",false)
+            .putString("last_status","Установка $version запущена")
+            .apply()
         Thread{
-            try{install(ctx,apk,version)}
+            try{install(ctx,apk,version,requireConfirmation)}
             catch(e:Exception){
                 installing.set(false)
+                p.edit().putBoolean("retry_confirmation",true)
+                    .putBoolean("manual_retry_required",true)
+                    .putString("last_status","Не удалось установить $version")
+                    .apply()
                 message(activity,"Ошибка установки: "+(e.message?:"неизвестно"))
             }
         }.start()
     }
 
-    private fun install(ctx:Context,apk:File,version:String){
+    private fun install(ctx:Context,apk:File,version:String,
+        requireConfirmation:Boolean){
         val manager=ctx.packageManager.packageInstaller
         val params=PackageInstaller.SessionParams(
             PackageInstaller.SessionParams.MODE_FULL_INSTALL)
@@ -327,7 +362,9 @@ object UpdateChecker {
         params.setSize(apk.length())
         if(Build.VERSION.SDK_INT>=31){
             params.setRequireUserAction(
-                PackageInstaller.SessionParams.USER_ACTION_NOT_REQUIRED)
+                if(requireConfirmation)
+                    PackageInstaller.SessionParams.USER_ACTION_REQUIRED
+                else PackageInstaller.SessionParams.USER_ACTION_NOT_REQUIRED)
         }
         val id=manager.createSession(params)
         try{
@@ -339,9 +376,10 @@ object UpdateChecker {
                 val intent=Intent(ctx,UpdateInstallReceiver::class.java).apply{
                     action="com.dungeon.widget.INSTALL_RESULT"
                     putExtra("target_version",version)
+                    putExtra("forced_confirmation",requireConfirmation)
                 }
                 val callback=PendingIntent.getBroadcast(
-                    ctx,version.hashCode(),intent,
+                    ctx,id,intent,
                     PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE)
                 session.commit(callback.intentSender)
             }
@@ -352,34 +390,70 @@ object UpdateChecker {
     }
 
     fun onInstallResult(ctx:Context,intent:Intent){
+        val p=prefs(ctx)
+        val version=intent.getStringExtra("target_version")?:""
+        val wasConfirmed=intent.getBooleanExtra("forced_confirmation",false)
         val status=intent.getIntExtra(
             PackageInstaller.EXTRA_STATUS,PackageInstaller.STATUS_FAILURE)
         when(status){
             PackageInstaller.STATUS_PENDING_USER_ACTION->{
                 val confirmation=intent.getParcelableExtra(
                     Intent.EXTRA_INTENT) as? Intent
-                installing.set(false)
+                // Keep installing=true while the confirmation UI is open.
+                // Otherwise onResume could submit the same APK a second time.
+                p.edit().putString("last_status",
+                    "Android ожидает подтверждения установки").apply()
                 if(confirmation!=null){
                     val activity=foreground?.get()
                     if(activity!=null&&!activity.isFinishing){
                         main.post{launchConfirmation(activity,confirmation)}
                     }else{
                         systemConfirmation=confirmation
-                        // Android can prevent showing installer UI while
-                        // backgrounded; it resumes when the app is reopened.
                     }
+                }else{
+                    installing.set(false)
+                    p.edit().putBoolean("retry_confirmation",true)
+                        .putBoolean("manual_retry_required",true)
+                        .apply()
                 }
             }
             PackageInstaller.STATUS_SUCCESS->{
                 installing.set(false)
-                // Android replaces the package while keeping app data.
+                systemConfirmation=null
+                p.edit().remove("pending_version")
+                    .remove("retry_confirmation")
+                    .remove("manual_retry_required")
+                    .putString("last_status","Версия $version установлена")
+                    .apply()
+                File(ctx.cacheDir,"DungeonWidget-v$version.apk").delete()
             }
             else->{
                 installing.set(false)
                 val reason=intent.getStringExtra(
-                    PackageInstaller.EXTRA_STATUS_MESSAGE)?:"неизвестная ошибка"
+                    PackageInstaller.EXTRA_STATUS_MESSAGE)?:"ошибка Android"
                 val activity=foreground?.get()
-                message(activity,"Не удалось установить обновление: $reason")
+                val aborted=status==PackageInstaller.STATUS_FAILURE_ABORTED
+                val canRetry=aborted && !wasConfirmed && version.isNotEmpty()
+                p.edit().putBoolean("retry_confirmation",true)
+                    .putBoolean("manual_retry_required",!canRetry)
+                    .putString("last_status",
+                        if(canRetry)"Повторная установка с подтверждением Android"
+                        else "Ошибка установки: "+reason.take(110))
+                    .apply()
+                if(canRetry && activity!=null && !activity.isFinishing){
+                    message(activity,
+                        "Android прервал установку. Повторяем с подтверждением.")
+                    main.post{
+                        if(!activity.isFinishing && !activity.isDestroyed)
+                            continuePending(activity,true)
+                    }
+                }else if(canRetry){
+                    // Background installers cannot reliably display UI. Keep
+                    // the downloaded APK and ask for confirmation on launch.
+                    p.edit().putBoolean("manual_retry_required",false).apply()
+                }else{
+                    message(activity,"Установка не завершена: "+reason)
+                }
             }
         }
     }

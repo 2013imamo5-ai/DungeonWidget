@@ -37,10 +37,10 @@ jobs:
       - name: Build permanently signed APK
         run: |
           gradle --no-daemon :app:assembleRelease
-          cp app/build/outputs/apk/release/app-release.apk DungeonWidget-v1.0.6.apk
+          cp app/build/outputs/apk/release/app-release.apk DungeonWidget-v1.0.7.apk
       - name: Publish direct APK
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release view v1.0.6 >/dev/null 2>&1 && gh release delete v1.0.6 --yes || true
-          gh release create v1.0.6 DungeonWidget-v1.0.6.apk --title "Dungeon Widget v1.0.6" --notes "Test release for v1.0.5 self-updater: signed APK with unchanged application ID and signing key. Test in-game update over Wi-Fi or mobile data via Settings > Updates > Check and update now. Gameplay and saves unchanged."
+          gh release view v1.0.7 >/dev/null 2>&1 && gh release delete v1.0.7 --yes || true
+          gh release create v1.0.7 DungeonWidget-v1.0.7.apk --title "Dungeon Widget v1.0.7" --notes "Improved self-updater reliability: keep the downloaded signed APK until Android confirms installation, retry aborted unattended installs once with system user confirmation, avoid repeated installation loops, expose update status and manual retry in Options. Also polish repeated exploration status text. Wi-Fi and cellular supported; existing saved progress and signing preserved."

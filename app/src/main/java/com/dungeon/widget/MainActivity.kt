@@ -255,7 +255,9 @@ class MainActivity:Activity(){
         }else ""
         val map=DungeonMap.get(state.floor,state.room)
         val explored=DungeonExploration.exploredPercent(state,map)
-        narration.text=state.log+"\nКОМНАТА "+state.room+"/8  ·  Разведано "+explored+"%"+
+        val summary=if(state.log.startsWith("Разведка:"))
+            "Герой осматривает проходы" else state.log
+        narration.text=summary+"\nКОМНАТА "+state.room+"/8  ·  Разведано "+explored+"%"+
             (if(state.paused)"  ·  ПАУЗА" else "")+battle
         if(page==0){
             expeditionStatsView?.text=expeditionStatsText()
@@ -585,6 +587,13 @@ class MainActivity:Activity(){
             addLine(this,"Версия "+(
                 packageManager.getPackageInfo(packageName,0).versionName
                 ?: "неизвестна"),13f,muted)
+            addLine(this,"Состояние: "+UpdateChecker.status(this@MainActivity),
+                12f,muted)
+            if(UpdateChecker.hasPending(this@MainActivity)){
+                action(this,"ПОВТОРИТЬ УСТАНОВКУ С ПОДТВЕРЖДЕНИЕМ"){
+                    UpdateChecker.retryPending(this@MainActivity)
+                }
+            }
             action(this,
                 "Автоматическая загрузка: "+
                 if(UpdateChecker.enabled(this@MainActivity))"ВКЛ" else "ВЫКЛ"){
@@ -596,6 +605,8 @@ class MainActivity:Activity(){
                 UpdateChecker.check(this@MainActivity,true)
             }
             addLine(this,
+                "Если первая установка прервётся, сохранённый APK можно "+
+                "запустить повторно без скачивания. "+
                 "Проверка при открытии игры и периодически в фоне. "+
                 "Ограничений по типу сети нет. "+
                 "APK проходит проверку подписи перед установкой.",12f,muted)
