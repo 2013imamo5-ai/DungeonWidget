@@ -404,24 +404,27 @@ class MainActivity:Activity(){
                     val tile=LinearLayout(this@MainActivity).apply{
                         orientation=LinearLayout.VERTICAL
                         gravity=Gravity.CENTER
-                        setPadding(dp(5),dp(8),dp(5),dp(8))
+                        setPadding(dp(5),dp(3),dp(5),dp(3))
                         background=background(0xFF283546.toInt(),
                             gear?.let{PixelGearIcon.rarityColor(it.rarity)}
                                 ?:0xFF465569.toInt(),10)
                         setOnClickListener{
-                            equipmentFilter=if(slot=="ring2")"ring" else slot
-                            refreshPage()
+                            if(gear!=null)showGearInfo(slot,gear)
+                            else{
+                                equipmentFilter=if(slot=="ring2")"ring" else slot
+                                refreshPage()
+                            }
                         }
                     }
-                    line.addView(tile,LinearLayout.LayoutParams(0,dp(112),1f).apply{
+                    line.addView(tile,LinearLayout.LayoutParams(0,dp(80),1f).apply{
                         marginEnd=dp(5);bottomMargin=dp(6)
                     })
                     addLine(tile,EquipmentLogic.icon(slot)+" "+EquipmentLogic.label(slot),
                         11f,muted,true).gravity=Gravity.CENTER
                     if(gear!=null){
                         tile.addView(ImageView(this@MainActivity).apply{
-                            setImageBitmap(PixelGearIcon.create(gear,42))
-                        },LinearLayout.LayoutParams(dp(42),dp(42)))
+                            setImageBitmap(PixelGearIcon.create(gear,48))
+                        },LinearLayout.LayoutParams(dp(48),dp(48)))
                         addLine(tile,gear.name,10f,ivory,true).apply{
                             gravity=Gravity.CENTER;maxLines=1;ellipsize=android.text.TextUtils.TruncateAt.END
                         }
@@ -432,6 +435,20 @@ class MainActivity:Activity(){
                 }
             }
         }
+    }
+    private fun showGearInfo(slot:String,gear:Gear){
+        val alternatives=state.gear.filter{it.slot==gear.slot && it.id!=gear.id}
+        val better=alternatives.maxByOrNull{EquipmentLogic.improvement(state,it,slot)}
+        val gain=better?.let{EquipmentLogic.improvement(state,it,slot)}?:0
+        val message="Сила: "+gear.power+" · "+DungeonGame.rarityName(gear.rarity)+
+            "\nСвойство: "+gear.trait+
+            (if(gear.set>0)" · Комплект "+gear.set else "")+
+            "\n"+(if(gain>0)"↑ Можно усилить: "+better?.name
+                else "✓ Улучшений для этого слота не найдено")
+        AlertDialog.Builder(this).setTitle(gear.name).setMessage(message)
+            .setPositiveButton("ВЫБРАТЬ ПРЕДМЕТ"){_,_->
+                equipmentFilter=gear.slot;refreshPage()
+            }.setNegativeButton("ЗАКРЫТЬ",null).show()
     }
     private var equipmentFilter="all"
     private fun inventory(){
@@ -468,13 +485,15 @@ class MainActivity:Activity(){
             else->state.gear.sortedWith(compareByDescending<Gear>{it.rarity}.thenByDescending{it.power})
         }
         gearSorted.filter{equipmentFilter=="all" || it.slot==equipmentFilter}.forEach{item->
-            val equipped=state.equipment[item.slot]==item.id
+            val equipped=item.id in state.equipment.values
+            val improvement=EquipmentLogic.recommendation(state,item)
             val star=when(item.rarity){4->"★★★★★";3->"★★★★";2->"★★★";1->"★★";else->"★"}
             val slot=when(item.slot){"weapon"->"⚔ Оружие";"armor"->"⛨ Броня";"ring"->"◈ Кольцо";else->"✧ Амулет"}
-            card(body,star+"  "+item.name,
+            card(body,(if(equipped)"✓ " else if(improvement>0)"↑ " else if(improvement<0)"↓ " else "• ")+star+"  "+item.name,
                 slot+" · "+DungeonGame.rarityName(item.rarity)+
                     " · сила "+item.power+" · "+item.trait+
-                    if(item.set>0)" · комплект "+item.set else ""){
+                    (if(item.set>0)" · комплект "+item.set else "")+
+                    (if(equipped)" · НАДЕТО" else if(improvement>0)" · УЛУЧШЕНИЕ" else " · без усиления")){
                 if(equipped)addLine(this,"✓ НАДЕТО",12f,0xFF9CD6AB.toInt(),true)
                 else{
                     val buttons=row(this)
