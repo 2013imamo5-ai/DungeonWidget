@@ -382,7 +382,70 @@ class MainActivity:Activity(){
                 "\nОружие: "+(state.weaponItem?.name?:state.weaponName)+
                 "\nБроня: "+(state.armorItem?.name?:state.armorName))
     }
+    private fun equipmentOverview(){
+        card(body,"⛨ СНАРЯЖЕНИЕ · "+state.className.uppercase(),
+            "⚔ "+state.attack+"   ⛨ "+state.defense+"   ♥ "+state.maxHp+
+            "   ✦ "+state.crit+"%   ◇ "+state.dodge+"%"){
+            addLine(this,"Бонус комплекта: +"+state.setBonus+
+                " · Восстановление: +"+state.equipmentStats.regeneration,
+                12f,muted)
+            val equipAction=row(this)
+            mini(equipAction,"✦ ПОДОБРАТЬ ЛУЧШЕЕ"){
+                change{DungeonGame.equipBest(this@MainActivity,state.heroClass)}
+            }
+        }
+        // Compact two-column equipment layout. Tapping a slot jumps to
+        // the matching items in the same scrollable tab, not a new activity.
+        card(body,"ЭКИПИРОВАНО · "+state.equipment.size+"/8"){
+            EquipmentLogic.slots.chunked(2).forEach{pair->
+                val line=row(this)
+                pair.forEach{slot->
+                    val gear=state.gear.firstOrNull{it.id==state.equipment[slot]}
+                    val tile=LinearLayout(this@MainActivity).apply{
+                        orientation=LinearLayout.VERTICAL
+                        gravity=Gravity.CENTER
+                        setPadding(dp(5),dp(8),dp(5),dp(8))
+                        background=background(0xFF283546.toInt(),
+                            gear?.let{PixelGearIcon.rarityColor(it.rarity)}
+                                ?:0xFF465569.toInt(),10)
+                        setOnClickListener{
+                            equipmentFilter=if(slot=="ring2")"ring" else slot
+                            refreshPage()
+                        }
+                    }
+                    line.addView(tile,LinearLayout.LayoutParams(0,dp(112),1f).apply{
+                        marginEnd=dp(5);bottomMargin=dp(6)
+                    })
+                    addLine(tile,EquipmentLogic.icon(slot)+" "+EquipmentLogic.label(slot),
+                        11f,muted,true).gravity=Gravity.CENTER
+                    if(gear!=null){
+                        tile.addView(ImageView(this@MainActivity).apply{
+                            setImageBitmap(PixelGearIcon.create(gear,42))
+                        },LinearLayout.LayoutParams(dp(42),dp(42)))
+                        addLine(tile,gear.name,10f,ivory,true).apply{
+                            gravity=Gravity.CENTER;maxLines=1;ellipsize=android.text.TextUtils.TruncateAt.END
+                        }
+                    }else{
+                        addLine(tile,"＋",27f,muted).gravity=Gravity.CENTER
+                        addLine(tile,"Пусто",11f,muted).gravity=Gravity.CENTER
+                    }
+                }
+            }
+        }
+    }
+    private var equipmentFilter="all"
     private fun inventory(){
+        equipmentOverview()
+        card(body,"▤ ПРЕДМЕТЫ · "+state.gear.size){
+            val filterRow=row(this)
+            mini(filterRow,if(equipmentFilter=="all")"✓ ВСЕ" else "ВСЕ"){
+                equipmentFilter="all";refreshPage()
+            }
+            if(equipmentFilter!="all")mini(filterRow,
+                "✓ "+EquipmentLogic.label(equipmentFilter)){
+                equipmentFilter="all";refreshPage()
+            }
+        }
         card(body,"▤ РЮКЗАК · "+state.gear.size+"/42",
             "Добыча подбирается автоматически. Нажми «Надеть» или «Разобрать». Два предмета одного комплекта дают бонус +4 к атаке и защите.")
         if(state.gear.isEmpty()){
@@ -404,7 +467,7 @@ class MainActivity:Activity(){
             2->state.gear.sortedWith(compareBy<Gear>{it.slot}.thenByDescending{it.rarity})
             else->state.gear.sortedWith(compareByDescending<Gear>{it.rarity}.thenByDescending{it.power})
         }
-        gearSorted.forEach{item->
+        gearSorted.filter{equipmentFilter=="all" || it.slot==equipmentFilter}.forEach{item->
             val equipped=state.equipment[item.slot]==item.id
             val star=when(item.rarity){4->"★★★★★";3->"★★★★";2->"★★★";1->"★★";else->"★"}
             val slot=when(item.slot){"weapon"->"⚔ Оружие";"armor"->"⛨ Броня";"ring"->"◈ Кольцо";else->"✧ Амулет"}
