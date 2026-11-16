@@ -69,6 +69,9 @@ object DungeonScene {
         // Objects are spawned at individual deterministic positions, rather
         // than having one fixed encounter in every room.
         val active=layout.events.firstOrNull{it.id==h.activeEvent}
+        val visualHitAge=if(live && motion!=null)
+            motion.combatAge(h.combatRevision,now)
+            else 10000
         // Battle staging is visual-only: the logical hero remains on the
         // encounter tile. The displayed hero faces the creature from an
         // adjacent tile rather than occupying exactly the same spot.
@@ -108,9 +111,9 @@ object DungeonScene {
                         block(c,ex-15f,ey-21f,30f,31f,0x44FFD37A)
                         dot(c,ex-3f,ey-37f,0xFFFFD781.toInt(),3f)
                     }
-                    val elapsedHit=(now-h.lastTick).coerceIn(0L,1000L)
+                    val elapsedHit=visualHitAge
                     val recoil=if(isActive && live && h.lastDamage>0 &&
-                        elapsedHit<290L){
+                        elapsedHit<290){
                         val strength=1f-elapsedHit/290f
                         val dx=ex-standX
                         val dy=ey-standY
@@ -127,9 +130,9 @@ object DungeonScene {
                         if(isActive)h.enemy else DungeonGame.enemyName(
                             h.biomeId,layout.seed+e.id))
                     c.restore()
-                    if(isActive && live && h.lastDamage>0 && elapsedHit<210L){
+                    if(isActive && live && h.lastDamage>0 && elapsedHit<210){
                         // Contact flash follows the enemy, never the hero.
-                        val flash=if(elapsedHit<95L)0x99FFF3C5.toInt()
+                        val flash=if(elapsedHit<95)0x99FFF3C5.toInt()
                             else 0x55FFE8B6.toInt()
                         block(c,ex-11f,ey-17f,22f,3f,flash)
                         block(c,ex-13f,ey-5f,3f,13f,flash)
@@ -196,9 +199,9 @@ object DungeonScene {
         val eventAge=if(live)(now-h.lastTick).coerceIn(0L,1050L).toInt() else 1000
         val combatRoom=active!=null &&
             (active.kind=="enemy"||active.kind=="elite"||active.kind=="boss")
+        val hitAge=visualHitAge
         val impact=combatRoom && live && !h.paused &&
-            h.lastDamage>0 && eventAge<830
-        val hitAge=eventAge
+            h.lastDamage>0 && hitAge<830
         // Simulated positions are authoritative. Blend only between the
         // previous and the current adjacent cell after each world tick.
         val traveling=h.exploreX!=h.explorePreviousX ||
@@ -230,9 +233,9 @@ object DungeonScene {
         // at 20 FPS the two silhouettes stay distinguishable.
         val lunge=if(combatActive && live && !h.paused){
             when{
-                eventAge<120->0f
-                eventAge<300->(eventAge-120f)/180f*3.8f
-                eventAge<520->(520f-eventAge)/220f*3.8f
+                hitAge<120->0f
+                hitAge<300->(hitAge-120f)/180f*3.8f
+                hitAge<520->(520f-hitAge)/220f*3.8f
                 else->0f
             }
         }else 0f
@@ -247,7 +250,7 @@ object DungeonScene {
         hero(c,heroDrawX,heroDrawY,walking,frame,h,accent,h.event=="camp")
         c.restore()
         if(impact){
-            weaponFx(c,heroDrawX,heroDrawY,targetX,targetY,h,eventAge,accent)
+            weaponFx(c,heroDrawX,heroDrawY,targetX,targetY,h,hitAge,accent)
         }
         if(impact && h.lastAbility.isNotEmpty() && hitAge<1050){
             val skillColor=when(h.heroClass){
@@ -266,7 +269,7 @@ object DungeonScene {
                 block(c,px-20f,py-23f,6f,23f,0xFFEAF2FA.toInt())
             }else if(h.heroClass==1){
                 for(i in 0..2){
-                    val progress=(eventAge/520f).coerceIn(0f,1f)
+                    val progress=(hitAge/520f).coerceIn(0f,1f)
                     block(c,px+(targetX-px)*progress,
                         py-18f+i*7f+(targetY-py)*progress,12f,2f,skillColor)
                 }

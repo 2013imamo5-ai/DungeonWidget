@@ -13,11 +13,31 @@ class DungeonMotion {
     private var x=0f
     private var y=0f
     private var initialized=false
+    private var combatInitialized=false
+    private var lastCombatRevision=0L
+    private var combatStarted=0L
 
     fun reset(){
         locationKey=Long.MIN_VALUE
         lastTime=0L
         initialized=false
+        combatInitialized=false
+    }
+
+    // Effects are triggered by a new combat revision, not the repeating
+    // game-tick clock. Opening a screen must not replay an old attack.
+    fun combatAge(revision:Long,now:Long):Int{
+        if(!combatInitialized){
+            combatInitialized=true
+            lastCombatRevision=revision
+            combatStarted=now
+            return 10000
+        }
+        if(revision!=lastCombatRevision){
+            lastCombatRevision=revision
+            combatStarted=now
+        }
+        return (now-combatStarted).coerceIn(0L,10000L).toInt()
     }
 
     fun sample(floor:Int,room:Int,targetX:Float,targetY:Float,now:Long):Pair<Float,Float>{

@@ -4,6 +4,7 @@ import android.content.Context
 import org.json.JSONArray
 import org.json.JSONObject
 import java.time.LocalDate
+import java.security.MessageDigest
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.random.Random
@@ -52,6 +53,7 @@ data class HeroState(
     var exploreX:Int=1,var exploreY:Int=5,
     var explorePreviousX:Int=1,var explorePreviousY:Int=5,
     var exploreFacing:Int=2,var exploreAction:String="scout",
+    var saveRevision:Long=0L,var combatRevision:Long=0L,
     val gear:MutableList<Gear> = mutableListOf(),
     val equipment:MutableMap<String,String> = mutableMapOf(),
     val discovered:MutableSet<String> = mutableSetOf(),
@@ -97,6 +99,7 @@ data class HeroState(
             "explorePreviousX" to explorePreviousX,"explorePreviousY" to explorePreviousY,
             "exploreFacing" to exploreFacing)
         ints.forEach{(k,v)->put(k,v)}
+        put("saveRevision",saveRevision);put("combatRevision",combatRevision)
         put("paused",paused);put("lastTick",lastTick);put("log",log)
         put("enemy",enemy);put("event",event);put("weaponName",weaponName)
         put("armorName",armorName);put("roomKind",roomKind);put("status",status)
@@ -121,6 +124,8 @@ data class HeroState(
         fun fromJson(raw:String):HeroState {
             val o=JSONObject(raw);val h=HeroState()
             h.hp=o.optInt("hp",40);h.level=o.optInt("level",1);h.xp=o.optInt("xp")
+            h.saveRevision=o.optLong("saveRevision",0L).coerceAtLeast(0L)
+            h.combatRevision=o.optLong("combatRevision",0L).coerceAtLeast(0L)
             h.gold=o.optInt("gold");h.floor=o.optInt("floor",1);h.room=o.optInt("room",1)
             h.weapon=o.optInt("weapon");h.armor=o.optInt("armor")
             h.potions=o.optInt("potions",3);h.kills=o.optInt("kills")
@@ -210,12 +215,81 @@ object DungeonGame{
         return pool[(variant and Int.MAX_VALUE)%pool.size]
     }
     fun stepMillis()=STEP
-    @Synchronized fun load(ctx:Context):HeroState=try{
-        val raw=ctx.getSharedPreferences(SAVE,Context.MODE_PRIVATE).getString("hero",null)
-        if(raw==null)HeroState() else HeroState.fromJson(raw)
-    }catch(_:Exception){HeroState()}
+    // Prevent an interrupted or corrupted preferences write from silently
+    // resetting a high-level character. Both copies use the exact same
+    // serialized snapshot and an integrity checksum. Legacy saves without
+    // checksums are still accepted and upgraded on their next save.
+    private var lastGood:HeroState?=null
+    private fun digest(s:String):String{
+        val bytes=MessageDigest.getInstance("SHA-256")
+            .digest(s.toByteArray(Charsets.UTF_8))
+        return bytes.joinToString(""){"%02x".format(it.toInt() and 255)}
+    }
+    private fun validSnapshot(raw:String?,checksum:String?):HeroState?{
+        if(raw.isNullOrEmpty())return null
+        if(!checksum.isNullOrEmpty() && !digest(raw).equals(checksum,true))
+            return null
+        return try{
+            val h=HeroState.fromJson(raw)
+            if(h.level<1 || h.floor<1 || h.room !in 1..8 ||
+                h.hp<0 || h.maxHp<=0 ||
+                h.exploreX !in 0 until DungeonMap.WIDTH ||
+                h.exploreY !in 0 until DungeonMap.HEIGHT) null else h
+        }catch(_:Exception){null}
+    }
+    @Synchronized fun load(ctx:Context):HeroState{
+        val p=ctx.getSharedPreferences(SAVE,Context.MODE_PRIVATE)
+        val primary=p.getString("hero",null)
+        val secondary=p.getString("hero_backup",null)
+        if(primary==null && secondary==null){
+            return lastGood?.let{HeroState.fromJson(it.asJson().toString())}
+                ?:HeroState()
+        }
+        val current=validSnapshot(primary,p.getString("hero_hash",null))
+        val backup=validSnapshot(secondary,p.getString("hero_backup_hash",null))
+        val result=listOfNotNull(current,backup)
+            .maxByOrNull{it.saveRevision}
+            ?:lastGood?.let{HeroState.fromJson(it.asJson().toString())}
+            ?:throw IllegalStateException(
+                "Повреждено сохранение. Исходные данные не перезаписаны.")
+        // The metadata revision may be ahead if a previous write was
+        // interrupted. Never treat a valid backup as stale on recovery.
+        result.saveRevision=maxOf(result.saveRevision,
+            p.getLong("save_revision",0L))
+        lastGood=HeroState.fromJson(result.asJson().toString())
+        // Recover the active copy after a failed write, without losing a
+        // more recent valid snapshot from the backup slot.
+        if(current==null || current.saveRevision<result.saveRevision){
+            val raw=result.asJson().toString()
+            p.edit().putString("hero",raw)
+                .putString("hero_hash",digest(raw)).apply()
+        }
+        return result
+    }
     @Synchronized fun save(ctx:Context,h:HeroState){
-        ctx.getSharedPreferences(SAVE,Context.MODE_PRIVATE).edit().putString("hero",h.asJson().toString()).apply()
+        val p=ctx.getSharedPreferences(SAVE,Context.MODE_PRIVATE)
+        val previous=p.getString("hero",null)
+        val stored=p.getLong("save_revision",0L)
+        if(h.saveRevision<stored){
+            throw IllegalStateException(
+                "Отменена попытка записать устаревшее состояние героя")
+        }
+        h.saveRevision=maxOf(h.saveRevision,stored)+1L
+        val raw=h.asJson().toString()
+        val check=digest(raw)
+        val oldChecksum=p.getString("hero_hash",null)
+        val validPrevious=validSnapshot(previous,oldChecksum)
+        val editor=p.edit()
+        if(validPrevious!=null){
+            editor.putString("hero_backup",previous)
+                .putString("hero_backup_hash",digest(previous!!))
+        }else{
+            editor.putString("hero_backup",raw)
+                .putString("hero_backup_hash",check)
+        }
+        editor.putString("hero",raw).putString("hero_hash",check)
+            .putLong("save_revision",h.saveRevision).apply()
+        lastGood=HeroState.fromJson(raw)
     }
     private fun today()=LocalDate.now().toString()
     private fun quest(h:HeroState){
@@ -598,6 +672,7 @@ object DungeonGame{
         if(h.tactic==2)damage=damage*128/100
         damage=damage.coerceAtLeast(1)
         h.lastDamage=damage
+        h.combatRevision++
         h.lastCritical=crit
         h.lastDodge=dodge
         h.enemyHp=(h.enemyHp-damage).coerceAtLeast(0)
@@ -705,6 +780,7 @@ object DungeonGame{
     private fun completeRoom(h:HeroState){
         h.pathStep=0;h.room++;h.roomsCleared++
         h.activeEvent=-1;h.enemyHp=0;h.enemyMaxHp=0
+        h.lastDamage=0;h.incomingDamage=0;h.lastAbility=""
         h.exploreRoom=""
         if(h.room>8){
             h.room=1;h.floor++
@@ -826,6 +902,9 @@ object DungeonGame{
         }
         h.pathStep=(h.pathStep+1).coerceAtMost(9999)
         h.event="explore"
+        // A successful movement invalidates stale hit particles and damage.
+        h.lastDamage=0;h.lastAbility="";h.incomingDamage=0
+        h.lastCritical=false;h.lastDodge=false
         DungeonExploration.reveal(h,room)
         h.log=when(h.exploreAction){
             "hunt"->"Герой заметил движение впереди"
@@ -841,6 +920,9 @@ object DungeonGame{
         return try{
             val h=HeroState.fromJson(raw)
             if(h.level<1||h.floor<1||h.hp<0)false else{
+                val revision=ctx.getSharedPreferences(SAVE,Context.MODE_PRIVATE)
+                    .getLong("save_revision",0L)
+                h.saveRevision=revision
                 h.lastTick=System.currentTimeMillis();save(ctx,h);true
             }
         }catch(_:Exception){false}
