@@ -139,7 +139,7 @@ class MainActivity:Activity(){
                     "\n"+state.log
             }else if(page==0){
                 scene.setImageDrawable(BitmapDrawable(resources,
-                    DungeonScene.render(state,frame++,true,1.06f,age,true,dungeonMotion)).apply{isFilterBitmap=false})
+                    DungeonScene.render(state,frame++,true,1.12f,age,true,dungeonMotion)).apply{isFilterBitmap=false})
             }
             if(now-lastWidgetRefresh>=12000L){
                 DungeonWidgetProvider.refreshAll(this@MainActivity)

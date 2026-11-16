@@ -94,8 +94,27 @@ object DungeonScene {
                     DungeonMap.distance(it,Tile(h.explorePreviousX,h.explorePreviousY))
                 } ?:enemyCell
         }else null
-        val standX=if(standCell!=null)standCell.x*16f+8f else 0f
-        val standY=if(standCell!=null)17f+standCell.y*16f+5f else 0f
+        // A single adjacent tile is only 16px while both silhouettes
+        // occupy 25–36px. Keep the on-screen combatants ~30px apart.
+        // The logical path and the encounter remain untouched.
+        val standDirectionX=if(enemyCell!=null && standCell!=null)
+            (standCell.x-enemyCell.x).toFloat() else 0f
+        val standDirectionY=if(enemyCell!=null && standCell!=null)
+            (standCell.y-enemyCell.y).toFloat() else 0f
+        val standDistance=kotlin.math.sqrt(
+            standDirectionX*standDirectionX+
+                standDirectionY*standDirectionY).coerceAtLeast(1f)
+        val separation=if(active?.kind=="boss")37f
+            else if(active?.kind=="elite" || "призрак" in h.enemy.lowercase())34f
+            else 29f
+        val standX=if(enemyCell!=null && standCell!=null)
+            (enemyCell.x*16f+8f+
+                standDirectionX/standDistance*separation).coerceIn(16f,304f)
+            else 0f
+        val standY=if(enemyCell!=null && standCell!=null)
+            (17f+enemyCell.y*16f+5f+
+                standDirectionY/standDistance*separation).coerceIn(36f,179f)
+            else 0f
         for(e in layout.events){
             if(DungeonExploration.completed(h,e))continue
             // Only objects inside the actual line of sight may appear on screen.
@@ -231,11 +250,13 @@ object DungeonScene {
         DungeonAtmosphere.heroShadow(c,px,py,now,walking)
         // Short wind-up and forward lunge, then a smooth recoil. Even
         // at 20 FPS the two silhouettes stay distinguishable.
+        // Attack has four visible phases: wind-up, strike, recoil and
+        // stance recovery. The hero never closes the whole safety gap.
         val lunge=if(combatActive && live && !h.paused){
             when{
-                hitAge<120->0f
-                hitAge<300->(hitAge-120f)/180f*3.8f
-                hitAge<520->(520f-hitAge)/220f*3.8f
+                hitAge<150->-2.8f*hitAge/150f
+                hitAge<300->-2.8f+(hitAge-150f)/150f*8.5f
+                hitAge<540->5.7f-(hitAge-300f)/240f*5.7f
                 else->0f
             }
         }else 0f
@@ -247,7 +268,10 @@ object DungeonScene {
         val heroDrawY=py+lunge*directionY/directionLength
         c.save()
         c.scale(0.63f,0.63f,heroDrawX,heroDrawY)
-        hero(c,heroDrawX,heroDrawY,walking,frame,h,accent,h.event=="camp")
+        hero(c,heroDrawX,heroDrawY,walking,frame,h,accent,
+            h.event=="camp",if(combatActive)hitAge else 10000,
+            if(combatActive)directionX else 0f,
+            if(combatActive)directionY else 0f)
         c.restore()
         if(impact){
             weaponFx(c,heroDrawX,heroDrawY,targetX,targetY,h,hitAge,accent)
@@ -342,8 +366,13 @@ object DungeonScene {
         val sourceWidth=(W/cameraZoom).toInt().coerceAtLeast(180)
         val sourceHeight=(if(cleanHud)H.toFloat() else 176f)
             .div(cameraZoom).toInt().coerceAtLeast(95)
-        val left=(px.toInt()-sourceWidth/2).coerceIn(0,W-sourceWidth)
-        val top=(py.toInt()-sourceHeight/2).coerceIn(
+        // Frame the pair during battle. Outside combat, leave extra space
+        // above the hero so the top HUD cannot cover their head.
+        val cameraX=if(combatActive)(px*0.64f+targetX*0.36f) else px
+        val cameraY=if(combatActive)(py*0.62f+targetY*0.38f) else py
+        val left=(cameraX.toInt()-sourceWidth/2).coerceIn(0,W-sourceWidth)
+        val centerOffset=if(cleanHud)18 else 7
+        val top=(cameraY.toInt()-sourceHeight/2-centerOffset).coerceIn(
             if(cleanHud)0 else 17,
             if(cleanHud)H-sourceHeight else 193-sourceHeight)
         if(cleanHud){
@@ -473,7 +502,8 @@ object DungeonScene {
     // Equipment-driven sprite: helm, chest, sleeves, gloves, boots and weapon
     // change in real-time when inventory equipment changes.
     private fun hero(c:Canvas,x:Float,y:Float,walk:Boolean,frame:Int,
-        h:HeroState,accent:Int,camp:Boolean){
+        h:HeroState,accent:Int,camp:Boolean,hitAge:Int,
+        targetDx:Float,targetDy:Float){
         val cl=h.heroClass
         val helmet=h.gear.firstOrNull{it.id==h.equipment["helmet"]}
         val chest=h.armorItem
@@ -531,8 +561,14 @@ object DungeonScene {
         block(c,x-8f,y-26f+bob,16f,8f,0xFFDDE3DE.toInt())
         block(c,x-7f,y-21f+bob,14f,4f,0xFF1B2636.toInt())
         dot(c,x-2f,y-21f+bob,accent,3f)
-        // 4-directional head details instead of the old always-facing-front mask.
-        when(h.exploreFacing){
+        // While fighting, turn the sprite toward the actual enemy rather
+        // than keeping the direction of its last logical walking step.
+        val facing=if(hitAge<9000 && (targetDx!=0f || targetDy!=0f)){
+            if(kotlin.math.abs(targetDx)>kotlin.math.abs(targetDy)){
+                if(targetDx>=0f)1 else 3
+            }else if(targetDy>=0f)2 else 0
+        }else h.exploreFacing
+        when(facing){
             0->{
                 // Looking away: solid rear helmet with a central engraved ridge.
                 block(c,x-9f,y-27f+bob,18f,12f,helmCol)
@@ -554,9 +590,14 @@ object DungeonScene {
                 dot(c,x+4f,y-23f+bob,0xFFE5EFEF.toInt(),2f)
             }
         }
-        val striking=h.exploreAction=="combat" && h.enemyHp>0 &&
-            now-h.lastTick in 0L..300L
-        val armSwing=if(striking)-3.5f else if(walk)stride*1.6f else 0f
+        val striking=hitAge in 0..560
+        val windup=when{
+            hitAge in 0..150->-4.5f*hitAge/150f
+            hitAge in 151..290->-4.5f
+            hitAge in 291..560->-4.5f*(560f-hitAge)/269f
+            else->0f
+        }
+        val armSwing=if(striking)windup else if(walk)stride*1.6f else 0f
         block(c,x-18f,y-10f+bob+armSwing,7f,19f,gloveCol)
         block(c,x-16f,y-7f+bob+armSwing,6f,12f,bright(gloveCol,22))
         if(gloves!=null)block(c,x-19f,y+3f+bob,9f,6f,gloveCol)
@@ -581,7 +622,16 @@ object DungeonScene {
         // Held equipment subtly tracks the stride; combat gives a clear
         // raised-weapon pose without changing the actual saved attack rules.
         c.save()
-        c.translate(0f,if(striking)-6f else if(walk)stride*1.25f else 0f)
+        c.translate(0f,if(striking)windup*1.65f
+            else if(walk)stride*1.25f else 0f)
+        if(striking){
+            val tilt=when{
+                hitAge<150->-12f*hitAge/150f
+                hitAge<290->-12f+(hitAge-150f)/140f*29f
+                else->17f*(560f-hitAge).coerceIn(0f,270f)/270f
+            }
+            c.rotate(if(facing==3)-tilt else tilt,x+13f,y-7f)
+        }
         when(style){
             "arrow"->{
                 block(c,x+15f,y-18f+bob,3f,30f,0xFFD3B58A.toInt())

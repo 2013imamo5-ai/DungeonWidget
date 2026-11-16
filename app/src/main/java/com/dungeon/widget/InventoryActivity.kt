@@ -30,7 +30,7 @@ class InventoryActivity:Activity(){
             if(isFinishing || !::gamePreview.isInitialized)return
             h=DungeonGame.advance(this@InventoryActivity)
             gamePreview.setImageBitmap(DungeonScene.render(
-                h,previewFrame++,true,1.06f,1000,true,previewMotion))
+                h,previewFrame++,true,1.12f,1000,true,previewMotion))
             // Smooth enough to track walking, without the expensive 20 FPS
             // loop used by the foreground expedition view.
             previewHandler.postDelayed(this,180L)

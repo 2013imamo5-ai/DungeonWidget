@@ -37,10 +37,10 @@ jobs:
       - name: Build permanently signed APK
         run: |
           gradle --no-daemon :app:assembleRelease
-          cp app/build/outputs/apk/release/app-release.apk DungeonWidget-v1.0.10.apk
+          cp app/build/outputs/apk/release/app-release.apk DungeonWidget-v1.0.11.apk
       - name: Publish direct APK
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release view v1.0.10 >/dev/null 2>&1 && gh release delete v1.0.10 --yes || true
-          gh release create v1.0.10 DungeonWidget-v1.0.10.apk --title "Dungeon Widget v1.0.10" --notes "Stability update: validated primary and backup saves with SHA-256 integrity, monotonic save revisions to block stale overwrites, safe recovery rather than silent fresh-game reset, one-shot combat animation triggers by combat revision, clear stale hit FX on exploration, and smooth combat motion. Existing progress and automatic updater are preserved."
+          gh release view v1.0.11 >/dev/null 2>&1 && gh release delete v1.0.11 --yes || true
+          gh release create v1.0.11 DungeonWidget-v1.0.11.apk --title "Dungeon Widget v1.0.11" --notes "Battle visual polish: separate hero from elite ghosts and bosses with wider staged spacing, animated anticipation/swing/recovery, turn towards enemy during encounters and reframe the camera to keep combatants visible below HUD. Retains game saves, progression, and self-updater."
