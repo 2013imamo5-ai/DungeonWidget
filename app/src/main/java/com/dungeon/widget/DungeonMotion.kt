@@ -22,7 +22,7 @@ class DungeonMotion {
 
     fun sample(floor:Int,room:Int,targetX:Float,targetY:Float,now:Long):Pair<Float,Float>{
         val key=(floor.toLong() shl 32) or (room.toLong() and 0xffffffffL)
-        if(!initialized||key!=locationKey||now<lastTime||now-lastTime>1000L){
+        if(!initialized||key!=locationKey||now<lastTime||now-lastTime>5000L){
             locationKey=key
             initialized=true
             x=targetX;y=targetY;lastTime=now
@@ -36,8 +36,10 @@ class DungeonMotion {
         if(distance<0.025f){x=targetX;y=targetY}
         else{
             // Low-pass frame jitter but never snap across map tiles.
-            val smoothing=(1.0-exp((-elapsed.toDouble()/85.0))).toFloat()
-            val maxStep=(elapsed*0.065f).coerceAtLeast(0f)
+            // Never discard continuity during a brief UI stall. Speed is
+            // capped to avoid snapping across a whole corridor at once.
+            val smoothing=(1.0-exp((-elapsed.toDouble()/125.0))).toFloat()
+            val maxStep=(elapsed*0.045f).coerceAtLeast(0f)
             val step=(distance*smoothing).coerceAtMost(maxStep).coerceAtMost(distance)
             if(distance>0f){
                 x+=dx/distance*step

@@ -37,10 +37,10 @@ jobs:
       - name: Build permanently signed APK
         run: |
           gradle --no-daemon :app:assembleRelease
-          cp app/build/outputs/apk/release/app-release.apk DungeonWidget-v1.0.8.apk
+          cp app/build/outputs/apk/release/app-release.apk DungeonWidget-v1.0.9.apk
       - name: Publish direct APK
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release view v1.0.8 >/dev/null 2>&1 && gh release delete v1.0.8 --yes || true
-          gh release create v1.0.8 DungeonWidget-v1.0.8.apk --title "Dungeon Widget v1.0.8" --notes "Pixel-art polish: biome-specific dungeon decoration (crypt bones, glowing mushrooms, ash embers, icy crystal clusters), distinctive enemy sprites (skeleton, fungal creatures, imps, armored guards and hunters), smooth enemy breathing, responsive hero walking and weapon poses, local hero lantern light and animated loot glints. Exploration, save data, signing, and built-in self-updates preserved."
+          gh release view v1.0.9 >/dev/null 2>&1 && gh release delete v1.0.9 --yes || true
+          gh release create v1.0.9 DungeonWidget-v1.0.9.apk --title "Dungeon Widget v1.0.9" --notes "Combat polish: separated hero and enemy battle positions, close-range hero lunge and enemy hit recoil/flash, synchronized attack effects, smooth visual interpolation through UI stalls, and a short staircase transition between rooms. Gameplay progression, signing and in-app auto updates retained."
