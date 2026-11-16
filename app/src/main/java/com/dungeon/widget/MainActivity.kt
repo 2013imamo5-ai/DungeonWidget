@@ -46,6 +46,7 @@ class MainActivity:Activity(){
     private var state=HeroState()
     private var running=false
     private var roomEnteredAt=System.currentTimeMillis()
+    private var previousRoomFrame:Bitmap?=null
     private var fullscreenDialog:Dialog?=null
     private var fullscreenView:ImageView?=null
     private var fullscreenLabel:TextView?=null
@@ -120,6 +121,12 @@ class MainActivity:Activity(){
                 val beforeRoom=state.room
                 state=DungeonGame.advance(this@MainActivity)
                 if(beforeFloor!=state.floor||beforeRoom!=state.room){
+                    // Save one frame of the outgoing room. The renderer
+                    // crossfades it into the new room before returning to
+                    // normal camera tracking.
+                    val outgoing=if(fullscreenDialog?.isShowing==true)
+                        fullscreenView?.drawable else scene.drawable
+                    previousRoomFrame=(outgoing as? BitmapDrawable)?.bitmap
                     roomEnteredAt=now
                     dungeonMotion.reset()
                 }
@@ -131,15 +138,18 @@ class MainActivity:Activity(){
                 if(now-lastPageRefresh>=9000L)refreshPage()
             }
             val age=(now-roomEnteredAt).coerceAtLeast(0).coerceAtMost(2000).toInt()
+            if(age>=750)previousRoomFrame=null
             if(fullscreenDialog?.isShowing==true){
                 fullscreenView?.setImageDrawable(BitmapDrawable(resources,
-                    DungeonScene.render(state,frame++,true,1.16f,age,true,dungeonMotion)).apply{isFilterBitmap=false})
+                    DungeonScene.render(state,frame++,true,1.16f,age,true,
+                        dungeonMotion,previousRoomFrame)).apply{isFilterBitmap=false})
                 fullscreenLabel?.text="♥ "+state.hp+"/"+state.maxHp+
                     "   Уровень "+state.level+"   ·   Этаж "+state.floor+
                     "\n"+state.log
             }else if(page==0){
                 scene.setImageDrawable(BitmapDrawable(resources,
-                    DungeonScene.render(state,frame++,true,1.12f,age,true,dungeonMotion)).apply{isFilterBitmap=false})
+                    DungeonScene.render(state,frame++,true,1.12f,age,true,
+                        dungeonMotion,previousRoomFrame)).apply{isFilterBitmap=false})
             }
             if(now-lastWidgetRefresh>=12000L){
                 DungeonWidgetProvider.refreshAll(this@MainActivity)
@@ -194,6 +204,7 @@ class MainActivity:Activity(){
         super.onResume();running=true;state=DungeonGame.advance(this)
         UpdateChecker.onResume(this)
         dungeonMotion.reset()
+        previousRoomFrame=null
         lastUpdate=0L;lastNumbers=0L
         handler.removeCallbacks(animator);handler.post(animator)
     }

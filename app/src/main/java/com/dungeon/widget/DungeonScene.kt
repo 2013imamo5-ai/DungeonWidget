@@ -28,7 +28,8 @@ object DungeonScene {
         p.isAntiAlias=false;c.drawText(s,x,y,p)
     }
     fun render(h:HeroState,frame:Int=0,live:Boolean=false,zoom:Float=1f,
-        transitionAge:Int=1000,cleanHud:Boolean=false,motion:DungeonMotion?=null):Bitmap{
+        transitionAge:Int=1000,cleanHud:Boolean=false,motion:DungeonMotion?=null,
+        previousFrame:Bitmap?=null):Bitmap{
         val b=Bitmap.createBitmap(W,H,Bitmap.Config.ARGB_8888)
         val c=Canvas(b)
         val biome=h.biomeId
@@ -366,23 +367,51 @@ object DungeonScene {
         val sourceWidth=(W/cameraZoom).toInt().coerceAtLeast(180)
         val sourceHeight=(if(cleanHud)H.toFloat() else 176f)
             .div(cameraZoom).toInt().coerceAtLeast(95)
-        // Frame the pair during battle. Outside combat, leave extra space
-        // above the hero so the top HUD cannot cover their head.
-        val cameraX=if(combatActive)(px*0.64f+targetX*0.36f) else px
-        val cameraY=if(combatActive)(py*0.62f+targetY*0.38f) else py
-        val left=(cameraX.toInt()-sourceWidth/2).coerceIn(0,W-sourceWidth)
-        val centerOffset=if(cleanHud)18 else 7
-        val top=(cameraY.toInt()-sourceHeight/2-centerOffset).coerceIn(
-            if(cleanHud)0 else 17,
-            if(cleanHud)H-sourceHeight else 193-sourceHeight)
+        // Follow the action with an overscan-safe camera. The viewport is
+        // permitted to travel slightly beyond map boundaries, preventing
+        // the top HUD from hiding a hero standing in the first corridor.
+        val cameraX=if(combatActive)(px*0.58f+targetX*0.42f) else px
+        val cameraY=if(combatActive)(py*0.58f+targetY*0.42f) else py
+        val desiredLeft=(cameraX-sourceWidth*0.50f)
+            .coerceIn(-38f,W-sourceWidth+38f)
+        val desiredTop=(cameraY-sourceHeight*0.58f)
+            .coerceIn(if(cleanHud)-66f else 17f,
+                if(cleanHud)H-sourceHeight+56f else 193f-sourceHeight)
+        val cameraPoint=if(live && motion!=null)
+            motion.camera(desiredLeft,desiredTop,now)
+            else Pair(desiredLeft,desiredTop)
+        val left=cameraPoint.first
+        val top=cameraPoint.second
+        val worldScaleX=W.toFloat()/sourceWidth
+        val worldScaleY=(if(cleanHud)H.toFloat() else 176f)/sourceHeight
         if(cleanHud){
-            // Identical horizontal and vertical pixel scale; the playable
-            // image now occupies all 208px rather than just 176px.
-            out.drawBitmap(b,Rect(left,top,left+sourceWidth,top+sourceHeight),
-                Rect(0,0,W,H),nearest)
+            // Draw only the valid world rectangle. The overscan is an
+            // intentional dark rock border; do not reveal unknown terrain.
+            out.drawColor(0xFF0B111B.toInt())
+            for(y in 0 until H step 16){
+                for(x in 0 until W step 16){
+                    val shade=if(((x/16)*7+(y/16)*3)%5==0)
+                        0xFF121E2B.toInt() else 0xFF0E1722.toInt()
+                    block(out,x.toFloat(),y.toFloat(),16f,16f,shade)
+                }
+            }
+            val sl=kotlin.math.floor(left).toInt().coerceAtLeast(0)
+            val st=kotlin.math.floor(top).toInt().coerceAtLeast(0)
+            val sr=kotlin.math.ceil(left+sourceWidth).toInt().coerceAtMost(W)
+            val sb=kotlin.math.ceil(top+sourceHeight).toInt().coerceAtMost(H)
+            if(sr>sl&&sb>st){
+                val dx0=((sl-left)*worldScaleX).toInt()
+                val dy0=((st-top)*worldScaleY).toInt()
+                val dx1=((sr-left)*worldScaleX).toInt()
+                val dy1=((sb-top)*worldScaleY).toInt()
+                out.drawBitmap(b,Rect(sl,st,sr,sb),
+                    Rect(dx0,dy0,dx1,dy1),nearest)
+            }
         }else{
+            val sl=left.toInt().coerceIn(0,W-sourceWidth)
+            val st=top.toInt().coerceIn(17,193-sourceHeight)
             out.drawBitmap(b,Rect(0,0,W,17),Rect(0,0,W,17),nearest)
-            out.drawBitmap(b,Rect(left,top,left+sourceWidth,top+sourceHeight),
+            out.drawBitmap(b,Rect(sl,st,sl+sourceWidth,st+sourceHeight),
                 Rect(0,17,W,193),nearest)
             out.drawBitmap(b,Rect(0,193,W,H),Rect(0,193,W,H),nearest)
         }
@@ -397,8 +426,20 @@ object DungeonScene {
                 txt(out,"▼",154f,117f,16f,0xFFE1C38F.toInt())
             }
         }
+        // Blend the old scene over the newly revealed room for a smooth
+        // fade-out/fade-in rather than a sudden camera teleport.
+        if(cleanHud && previousFrame!=null && !previousFrame.isRecycled
+            && transitionAge<360){
+            val alpha=(255f*(1f-transitionAge/360f)).toInt()
+                .coerceIn(0,255)
+            val overlay=Paint().apply{isFilterBitmap=false;this.alpha=alpha}
+            out.drawBitmap(previousFrame,0f,0f,overlay)
+        }
         if(cleanHud)drawHud(out,layout,h,accent,
-            (px-left)*W/sourceWidth,(py-top)*H/sourceHeight)
+            (px-left)*worldScaleX,(py-top)*worldScaleY,
+            if(combatActive)(targetX-left)*worldScaleX else -1000f,
+            if(combatActive)(targetY-top)*worldScaleY else -1000f,
+            combatActive,now,motion)
         b.recycle()
         return result
     }
@@ -427,7 +468,9 @@ object DungeonScene {
         c.restore()
     }
     private fun drawHud(c:Canvas,room:RoomLayout,h:HeroState,
-        accent:Int,heroScreenX:Float,heroScreenY:Float){
+        accent:Int,heroScreenX:Float,heroScreenY:Float,
+        enemyScreenX:Float,enemyScreenY:Float,combat:Boolean,
+        now:Long,motion:DungeonMotion?){
         // A condensed, high-contrast HUD, set over the real dungeon view.
         block(c,5f,4f,145f,40f,0xED13202E.toInt())
         block(c,153f,4f,162f,40f,0xED13202E.toInt())
@@ -452,16 +495,19 @@ object DungeonScene {
         txt(c,"УР. "+h.level,160f,20f,11f,0xFFF0E8D9.toInt())
         txt(c,"◈ "+h.gems,229f,20f,10f,0xFFCFD8F6.toInt())
         txt(c,"◉ "+h.gold,160f,37f,12f,0xFFE9C77F.toInt())
-        // Enlarged 20x11 revealed map. Only discovered tiles are plotted.
-        val x0=235f
-        val y0=146f
+        // Adaptive tactical minimap relocates away from the hero and
+        // the encounter target. It never covers the top status panels.
+        val corner=motion?.mapCorner(heroScreenX,heroScreenY,
+            enemyScreenX,enemyScreenY,combat,now)
+            ?:if(heroScreenX>205f&&heroScreenY>120f)1 else 0
+        val mapLeft=if(corner==0||corner==2)225f else 4f
+        val mapTop=if(corner==0||corner==1)133f else 58f
+        val x0=mapLeft+10f
+        val y0=mapTop+13f
         val tile=3.5f
-        // When the hero walks behind the map, make it translucent instead
-        // of covering their silhouette. The markers remain legible.
-        val nearMap=heroScreenX>211f&&heroScreenY>122f
-        c.saveLayerAlpha(225f,133f,316f,193f,if(nearMap)140 else 255)
-        block(c,225f,133f,91f,60f,0xF5121F2E.toInt())
-        block(c,225f,133f,91f,2f,0xFF718097.toInt())
+        c.saveLayerAlpha(mapLeft,mapTop,mapLeft+91f,mapTop+60f,245)
+        block(c,mapLeft,mapTop,91f,60f,0xF5121F2E.toInt())
+        block(c,mapLeft,mapTop,91f,2f,0xFF718097.toInt())
         for(y in 0 until DungeonMap.HEIGHT)for(x in 0 until DungeonMap.WIDTH){
             if(DungeonExploration.seen(h,x,y)&&room.isFloor(x,y)){
                 val lit=DungeonExploration.visible(room,
@@ -481,12 +527,12 @@ object DungeonScene {
             block(c,x0+room.exit.x*tile,y0+room.exit.y*tile,5f,5f,
                 0xFF87E2A8.toInt())
         }
-        val heroX=x0+h.exploreX*tile
-        val heroY=y0+h.exploreY*tile
-        block(c,heroX-2f,heroY-2f,8f,8f,0xFF0E1724.toInt())
-        block(c,heroX,heroY,5f,5f,accent)
-        val percentage=DungeonExploration.exploredPercent(h,room)
-        txt(c,"КАРТА "+percentage+"%",229f,142f,8f,
+        val markerX=x0+h.exploreX*tile
+        val markerY=y0+h.exploreY*tile
+        block(c,markerX-2f,markerY-2f,8f,8f,0xFF0E1724.toInt())
+        block(c,markerX,markerY,5f,5f,accent)
+        val percent=DungeonExploration.exploredPercent(h,room)
+        txt(c,"КАРТА "+percent+"%",mapLeft+4f,mapTop+9f,8f,
             0xFFD6E0E9.toInt())
         c.restore()
     }
