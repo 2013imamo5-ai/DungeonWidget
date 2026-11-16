@@ -378,7 +378,7 @@ object DungeonScene {
             .coerceIn(if(cleanHud)-66f else 17f,
                 if(cleanHud)H-sourceHeight+56f else 193f-sourceHeight)
         val cameraPoint=if(live && motion!=null)
-            motion.camera(desiredLeft,desiredTop,now)
+            motion.camera(desiredLeft,desiredTop,now,h.floor,h.room)
             else Pair(desiredLeft,desiredTop)
         val left=cameraPoint.first
         val top=cameraPoint.second
