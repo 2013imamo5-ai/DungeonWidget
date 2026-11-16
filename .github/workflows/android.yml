@@ -37,10 +37,10 @@ jobs:
       - name: Build permanently signed APK
         run: |
           gradle --no-daemon :app:assembleRelease
-          cp app/build/outputs/apk/release/app-release.apk DungeonWidget-v1.0.13.apk
+          cp app/build/outputs/apk/release/app-release.apk DungeonWidget-v1.0.14.apk
       - name: Publish direct APK
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release view v1.0.13 >/dev/null 2>&1 && gh release delete v1.0.13 --yes || true
-          gh release create v1.0.13 DungeonWidget-v1.0.13.apk --title "Dungeon Widget v1.0.13" --notes "Consistent camera behavior between rooms and reduced minimap jumping. Hero scale, dungeon viewport, progression, saves and in-app updates remain unchanged."
+          gh release view v1.0.14 >/dev/null 2>&1 && gh release delete v1.0.14 --yes || true
+          gh release create v1.0.14 DungeonWidget-v1.0.14.apk --title "Dungeon Widget v1.0.14" --notes "One persistent live dungeon viewport across all five tabs. Camera and animation continue while browsing inventory, camp, hero and options. Scale and saves unchanged."
