@@ -22,6 +22,7 @@ class DungeonMotion {
     private var cameraClock=0L
     private var minimapCorner=0
     private var minimapLastChanged=0L
+    private var cameraLocationKey=Long.MIN_VALUE
 
     fun reset(){
         locationKey=Long.MIN_VALUE
@@ -29,6 +30,7 @@ class DungeonMotion {
         initialized=false
         combatInitialized=false
         cameraReady=false
+        cameraLocationKey=Long.MIN_VALUE
         minimapCorner=0
         minimapLastChanged=0L
     }
@@ -54,7 +56,13 @@ class DungeonMotion {
      * overscan around the world so the hero can stay beneath the HUD even
      * while exploring the first row of the map.
      */
-    fun camera(targetX:Float,targetY:Float,now:Long):Pair<Float,Float>{
+    fun camera(targetX:Float,targetY:Float,now:Long, floor:Int,room:Int):Pair<Float,Float>{
+        val key=(floor.toLong() shl 32) or (room.toLong() and 0xffffffffL)
+        if(key!=cameraLocationKey){
+            cameraLocationKey=key
+            cameraReady=false
+            minimapLastChanged=now
+        }
         if(!cameraReady||now<cameraClock||now-cameraClock>5000L){
             cameraX=targetX
             cameraY=targetY
@@ -97,8 +105,10 @@ class DungeonMotion {
         }
         val best=scores.indices.minByOrNull{scores[it]}?:0
         val current=scores[minimapCorner]
-        if(best!=minimapCorner && (now-minimapLastChanged>1200L)
-            && (current>scores[best]+8f || current>35f)){
+        // Keep a corner unless moving actually clears a significant obstruction.
+        // Prevents jitter when the player is near the minimap boundary.
+        if(best!=minimapCorner && (now-minimapLastChanged>2200L)
+            && (current>scores[best]+14f || current>42f)){
             minimapCorner=best
             minimapLastChanged=now
         }
