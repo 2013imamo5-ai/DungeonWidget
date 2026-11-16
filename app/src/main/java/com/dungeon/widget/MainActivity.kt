@@ -146,7 +146,8 @@ class MainActivity:Activity(){
                 fullscreenLabel?.text="♥ "+state.hp+"/"+state.maxHp+
                     "   Уровень "+state.level+"   ·   Этаж "+state.floor+
                     "\n"+state.log
-            }else if(page==0){
+            }else{
+                // One persistent live dungeon viewport across every tab.
                 scene.setImageDrawable(BitmapDrawable(resources,
                     DungeonScene.render(state,frame++,true,1.12f,age,true,
                         dungeonMotion,previousRoomFrame)).apply{isFilterBitmap=false})
@@ -294,10 +295,7 @@ class MainActivity:Activity(){
         }
     }
     private fun switchPage(idx:Int){
-        if(idx==1){
-            startActivity(Intent(this,InventoryActivity::class.java))
-            return
-        }
+        // Keep the same live scene mounted while switching tabs.
         if(page!=idx){page=idx;buildTabs();details.scrollTo(0,0)}
         refreshPage()
     }
