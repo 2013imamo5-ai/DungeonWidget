@@ -37,10 +37,10 @@ jobs:
       - name: Build permanently signed APK
         run: |
           gradle --no-daemon :app:assembleRelease
-          cp app/build/outputs/apk/release/app-release.apk DungeonWidget-v1.0.12.apk
+          cp app/build/outputs/apk/release/app-release.apk DungeonWidget-v1.0.13.apk
       - name: Publish direct APK
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release view v1.0.12 >/dev/null 2>&1 && gh release delete v1.0.12 --yes || true
-          gh release create v1.0.12 DungeonWidget-v1.0.12.apk --title "Dungeon Widget v1.0.12" --notes "Smart camera follows the hero with safe overscan near dungeon edges, keeps battles framed under the HUD, repositions the minimap between four corners to avoid the hero and enemy, and crossfades between rooms using the last displayed frame. Gameplay, signing, saves and self-updates preserved."
+          gh release view v1.0.13 >/dev/null 2>&1 && gh release delete v1.0.13 --yes || true
+          gh release create v1.0.13 DungeonWidget-v1.0.13.apk --title "Dungeon Widget v1.0.13" --notes "Consistent camera behavior between rooms and reduced minimap jumping. Hero scale, dungeon viewport, progression, saves and in-app updates remain unchanged."
