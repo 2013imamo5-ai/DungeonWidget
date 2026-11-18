@@ -68,6 +68,7 @@ object CampFloorScene {
         for(i in 0..8){
             rect(c,153f,35f+i*16f,12f,2f,0xFF877258.toInt())
         }
+        SanctuaryDecor.draw(c,frame,live)
         // Forge (top left): grows chimney, glowing anvil and tools.
         rect(c,37f,46f,56f,37f,0xFF252D36.toInt())
         rect(c,40f,42f,50f,7f,0xFF777B78.toInt())
