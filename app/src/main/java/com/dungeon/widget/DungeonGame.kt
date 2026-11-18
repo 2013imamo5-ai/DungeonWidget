@@ -42,7 +42,7 @@ data class HeroState(
     var elite:Boolean=false,var elitesDefeated:Int=0,var bossPhase:Int=0,
     var attackVisual:String="slash",var enemyWarning:Boolean=false,
     var effectType:String="",var effectTicks:Int=0,
-    var recovery:Int=0,var autoPotion:Int=35,var autoSalvage:Boolean=false,
+    var recovery:Int=0,var supplies:Int=0,var autoPotion:Int=35,var autoSalvage:Boolean=false,
     var autoEquip:Boolean=false,var autoSalvageRarity:Int=1,
     var theme:Int=0,var opacity:Int=92,var eco:Boolean=false,
     var questDay:String="",var questCount:Int=0,var questClaimed:Boolean=false,
@@ -88,7 +88,7 @@ data class HeroState(
             "skillAttack" to skillAttack,"skillDefense" to skillDefense,
             "skillLuck" to skillLuck,"shards" to shards,"forge" to forge,
             "healer" to healer,"scouts" to scouts,"lastDamage" to lastDamage,
-            "cooldown" to cooldown,"recovery" to recovery,"autoPotion" to autoPotion,
+            "cooldown" to cooldown,"recovery" to recovery,"supplies" to supplies,"autoPotion" to autoPotion,
             "theme" to theme,"opacity" to opacity,"questCount" to questCount,
             "enemyHp" to enemyHp,"enemyMaxHp" to enemyMaxHp,
             "battleRound" to battleRound,"incomingDamage" to incomingDamage,
@@ -144,6 +144,7 @@ data class HeroState(
             h.skillLuck=o.optInt("skillLuck");h.shards=o.optInt("shards")
             h.forge=o.optInt("forge");h.healer=o.optInt("healer");h.scouts=o.optInt("scouts")
             h.lastDamage=o.optInt("lastDamage");h.cooldown=o.optInt("cooldown")
+            h.supplies=o.optInt("supplies").coerceIn(0,12)
             h.enemyHp=o.optInt("enemyHp");h.enemyMaxHp=o.optInt("enemyMaxHp")
             h.battleRound=o.optInt("battleRound");h.incomingDamage=o.optInt("incomingDamage")
             h.abilityMeter=o.optInt("abilityMeter").coerceIn(0,4)
@@ -337,14 +338,35 @@ object DungeonGame{
             h.event="potion";h.log="Герой использовал лечебное зелье";true
         }
     }
+    fun upgradeCost(level:Int):Int=55+level*55+level*level*8
+    fun restCost(h:HeroState):Int=12+h.level*3
+    fun supplyCost(h:HeroState):Int=25+h.floor.coerceAtMost(20)*2
+    fun restAtCamp(ctx:Context)=mutate(ctx){h->
+        val cost=restCost(h)
+        if(h.gold<cost || (h.hp>=h.maxHp && h.effectTicks==0))false else {
+            h.gold-=cost
+            h.hp=min(h.maxHp,h.hp+h.maxHp*(45+h.healer.coerceAtMost(5)*8)/100)
+            h.effectTicks=0;h.effectType=""
+            h.log="Отдых у костра: здоровье восстановлено, недуги сняты"
+            h.event="camp";true
+        }
+    }
+    fun prepareExpedition(ctx:Context)=mutate(ctx){h->
+        val cost=supplyCost(h)
+        if(h.gold<cost || h.supplies>0)false else {
+            h.gold-=cost;h.supplies=(3+h.camp/3).coerceAtMost(8)
+            h.log="Припасы собраны: ${h.supplies} защищённых боёв"
+            h.event="camp";true
+        }
+    }
     fun buyPotion(ctx:Context)=mutate(ctx){h->
         val price=25+h.floor*2
         if(h.gold<price)false else{h.gold-=price;h.potions++;h.log="Куплено зелье";true}
     }
     fun upgrade(ctx:Context,which:String)=mutate(ctx){h->
         val lv=when(which){"camp"->h.camp;"forge"->h.forge;"healer"->h.healer;else->h.scouts}
-        val cost=80+lv*85
-        if(h.gold<cost||lv>=25)false else{
+        val cost=upgradeCost(lv)
+        if(h.gold<cost||lv>=12)false else{
             h.gold-=cost
             when(which){"camp"->{h.camp++;h.hp+=6}
                 "forge"->h.forge++
@@ -589,7 +611,7 @@ object DungeonGame{
         h.enemyHp=0;h.enemyMaxHp=0;h.battleRound=0;h.enemyWarning=false
         h.elite=false;h.bossPhase=0;h.lastAbility=""
         h.exploreRoom="";h.activeEvent=-1;h.exploreSeen="";h.exploreVisited=""
-        h.potions=max(2,h.potions);h.event="camp"
+        h.potions=max(2,h.potions);h.supplies=0;h.event="camp"
         h.log="Герой пал! Возвращение в лагерь. Экипировка сохранена"
     }
     private fun checkMedals(h:HeroState){
@@ -691,6 +713,7 @@ object DungeonGame{
             if(boss && h.bossPhase==1)taken=taken*125/100
             if(h.tactic==1)taken=taken*65/100
             if(h.tactic==2)taken=taken*125/100
+            if(h.supplies>0)taken=taken*85/100
             if(special && h.heroClass==0)taken=taken*30/100
             h.incomingDamage=taken
             h.hp-=taken
@@ -723,10 +746,13 @@ object DungeonGame{
         }
         h.enemyWarning=false;h.incomingDamage=0
         h.kills++;h.combo++;h.questCount++
+        val provisioned=h.supplies>0
+        if(provisioned)h.supplies--
         val xp=6+h.floor*2+(if(boss)45 else if(h.elite)28 else 0)
         gainXp(h,xp)
-        h.gold+=5+h.floor+Random.nextInt(10)+
-            (if(boss)120 else if(h.elite)55+h.floor else 0)
+        h.gold+=3+h.floor/2+Random.nextInt(7)+
+            (if(boss)75+h.floor*2 else if(h.elite)30+h.floor else 0)+
+            (if(provisioned)5+h.scouts/2 else 0)
         if(effects.regeneration>0||h.combo%6==0)
             h.hp=min(h.maxHp,h.hp+3+h.level+effects.regeneration)
         if(boss){h.bosses++;h.gems+=3;collect(h,createGear(h,true))}
@@ -744,12 +770,12 @@ object DungeonGame{
         when(h.roomKind){
             "battle","boss"->combat(h,h.roomKind=="boss")
             "secret"->{
-                h.relics++;h.gems+=2;h.gold+=45+h.floor*3
+                h.relics++;h.gems+=2;h.gold+=30+h.floor*2
                 collect(h,createGear(h,true));h.event="relic"
                 h.log="Тайная комната! Найдены сокровища и реликвия"
             }
             "chest"->{
-                h.chests++;h.gold+=15+h.floor*5+Random.nextInt(24)
+                h.chests++;h.gold+=12+h.floor*3+Random.nextInt(15)
                 if(Random.nextInt(100)<48+h.scouts)collect(h,createGear(h))
                 h.event="chest";h.log="Открыт сундук с сокровищами"
             }
@@ -767,7 +793,7 @@ object DungeonGame{
                 if(h.hp<=0)death(h)
             }
             "merchant"->{
-                h.event="merchant";h.gold+=5+h.scouts*2
+                h.event="merchant";h.gold+=3+h.scouts
                 h.log="Встречен странствующий торговец"
             }
             else->{
