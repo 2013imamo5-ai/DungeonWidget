@@ -42,7 +42,7 @@ data class HeroState(
     var elite:Boolean=false,var elitesDefeated:Int=0,var bossPhase:Int=0,
     var attackVisual:String="slash",var enemyWarning:Boolean=false,
     var effectType:String="",var effectTicks:Int=0,
-    var recovery:Int=0,var supplies:Int=0,var autoPotion:Int=35,var autoSalvage:Boolean=false,
+    var recovery:Int=0,var supplies:Int=0,var inCamp:Boolean=false,var autoPotion:Int=35,var autoSalvage:Boolean=false,
     var autoEquip:Boolean=false,var autoSalvageRarity:Int=1,
     var theme:Int=0,var opacity:Int=92,var eco:Boolean=false,
     var questDay:String="",var questCount:Int=0,var questClaimed:Boolean=false,
@@ -100,7 +100,7 @@ data class HeroState(
             "exploreFacing" to exploreFacing)
         ints.forEach{(k,v)->put(k,v)}
         put("saveRevision",saveRevision);put("combatRevision",combatRevision)
-        put("paused",paused);put("lastTick",lastTick);put("log",log)
+        put("paused",paused);put("inCamp",inCamp);put("lastTick",lastTick);put("log",log)
         put("enemy",enemy);put("event",event);put("weaponName",weaponName)
         put("armorName",armorName);put("roomKind",roomKind);put("status",status)
         put("autoSalvage",autoSalvage);put("eco",eco);put("questDay",questDay)
@@ -129,7 +129,7 @@ data class HeroState(
             h.gold=o.optInt("gold");h.floor=o.optInt("floor",1);h.room=o.optInt("room",1)
             h.weapon=o.optInt("weapon");h.armor=o.optInt("armor")
             h.potions=o.optInt("potions",3);h.kills=o.optInt("kills")
-            h.paused=o.optBoolean("paused");h.lastTick=o.optLong("lastTick",System.currentTimeMillis())
+            h.paused=o.optBoolean("paused");h.inCamp=o.optBoolean("inCamp");h.lastTick=o.optLong("lastTick",System.currentTimeMillis())
             h.log=o.optString("log","Герой входит в склеп")
             h.gems=o.optInt("gems");h.camp=o.optInt("camp");h.bestFloor=o.optInt("bestFloor",1)
             h.deaths=o.optInt("deaths");h.chests=o.optInt("chests");h.bosses=o.optInt("bosses")
@@ -305,7 +305,7 @@ object DungeonGame{
             DungeonExploration.prepare(h,layout)
             save(ctx,h)
         }
-        if(!h.paused){
+        if(!h.paused && !h.inCamp){
             val elapsed=(now-h.lastTick).coerceAtLeast(0)
             val count=(elapsed/STEP).coerceAtMost(82000L).toInt()
             if(count>0){
@@ -328,6 +328,20 @@ object DungeonGame{
         if(okay)save(ctx,h)
         return okay
     }
+    fun enterCamp(ctx:Context)=mutate(ctx){h->
+        if(h.inCamp)false else {
+            h.inCamp=true;h.lastTick=System.currentTimeMillis()
+            h.log="Этаж 0: безопасное убежище подземелья"
+            h.event="camp";true
+        }
+    }
+    fun leaveCamp(ctx:Context)=mutate(ctx){h->
+        if(!h.inCamp)false else {
+            h.inCamp=false;h.lastTick=System.currentTimeMillis()
+            h.log="Герой возвращается к исследованию этажа "+h.floor
+            h.event="explore";true
+        }
+    }
     fun toggle(ctx:Context)=mutate(ctx){h->
         h.paused=!h.paused;h.lastTick=System.currentTimeMillis()
         h.log=if(h.paused)"Отряд остановился" else "Исследование продолжается";true
@@ -343,7 +357,7 @@ object DungeonGame{
     fun supplyCost(h:HeroState):Int=25+h.floor.coerceAtMost(20)*2
     fun restAtCamp(ctx:Context)=mutate(ctx){h->
         val cost=restCost(h)
-        if(h.gold<cost || (h.hp>=h.maxHp && h.effectTicks==0))false else {
+        if(!h.inCamp || h.gold<cost || (h.hp>=h.maxHp && h.effectTicks==0))false else {
             h.gold-=cost
             h.hp=min(h.maxHp,h.hp+h.maxHp*(45+h.healer.coerceAtMost(5)*8)/100)
             h.effectTicks=0;h.effectType=""
@@ -353,7 +367,7 @@ object DungeonGame{
     }
     fun prepareExpedition(ctx:Context)=mutate(ctx){h->
         val cost=supplyCost(h)
-        if(h.gold<cost || h.supplies>0)false else {
+        if(!h.inCamp || h.gold<cost || h.supplies>0)false else {
             h.gold-=cost;h.supplies=(3+h.camp/3).coerceAtMost(8)
             h.log="Припасы собраны: ${h.supplies} защищённых боёв"
             h.event="camp";true
@@ -366,7 +380,7 @@ object DungeonGame{
     fun upgrade(ctx:Context,which:String)=mutate(ctx){h->
         val lv=when(which){"camp"->h.camp;"forge"->h.forge;"healer"->h.healer;else->h.scouts}
         val cost=upgradeCost(lv)
-        if(h.gold<cost||lv>=12)false else{
+        if(!h.inCamp||h.gold<cost||lv>=12)false else{
             h.gold-=cost
             when(which){"camp"->{h.camp++;h.hp+=6}
                 "forge"->h.forge++
@@ -611,7 +625,7 @@ object DungeonGame{
         h.enemyHp=0;h.enemyMaxHp=0;h.battleRound=0;h.enemyWarning=false
         h.elite=false;h.bossPhase=0;h.lastAbility=""
         h.exploreRoom="";h.activeEvent=-1;h.exploreSeen="";h.exploreVisited=""
-        h.potions=max(2,h.potions);h.supplies=0;h.event="camp"
+        h.potions=max(2,h.potions);h.supplies=0;h.inCamp=true;h.event="camp"
         h.log="Герой пал! Возвращение в лагерь. Экипировка сохранена"
     }
     private fun checkMedals(h:HeroState){
@@ -864,7 +878,7 @@ object DungeonGame{
         DungeonExploration.complete(h,e)
     }
     fun step(h:HeroState){
-        if(h.paused)return
+        if(h.paused||h.inCamp)return
         if(h.recovery>0){
             h.recovery--;h.hp=min(h.maxHp,h.hp+h.maxHp/5)
             h.event="camp"

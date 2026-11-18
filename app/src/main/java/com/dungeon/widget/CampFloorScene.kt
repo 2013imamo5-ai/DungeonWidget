@@ -1,0 +1,118 @@
+package com.dungeon.widget
+
+import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.graphics.Color
+import android.graphics.Paint
+import android.graphics.Typeface
+import kotlin.math.sin
+
+/** Persistent safe floor visually separate from the procedurally generated rooms. */
+object CampFloorScene {
+    private const val W=320
+    private const val H=208
+    private val p=Paint().apply { isAntiAlias=false;isFilterBitmap=false }
+    private fun rect(c:Canvas,x:Float,y:Float,w:Float,h:Float,color:Int){
+        p.color=color;c.drawRect(x,y,x+w,y+h,p)
+    }
+    private fun text(c:Canvas,s:String,x:Float,y:Float,size:Float,color:Int){
+        p.color=color;p.textSize=size;p.typeface=Typeface.create("monospace",Typeface.BOLD)
+        c.drawText(s,x,y,p)
+    }
+    private fun light(c:Canvas,x:Float,y:Float,w:Float,color:Int){
+        rect(c,x-w/2,y-3,w,6,color)
+    }
+    fun render(h:HeroState,frame:Int,live:Boolean):Bitmap{
+        val b=Bitmap.createBitmap(W,H,Bitmap.Config.ARGB_8888)
+        val c=Canvas(b)
+        c.drawColor(0xFF101922.toInt())
+        // The sanctuary is a subterranean hall, not an outdoor menu.
+        for(row in 0..12)for(col in 0..20){
+            val x=col*16f+(if(row%2==0)0f else -8f)
+            val y=row*16f
+            val edge=(row*7+col*13)%5
+            rect(c,x,y,15f,15f,if(edge==0)0xFF28313B.toInt() else 0xFF212A34.toInt())
+            rect(c,x,y,14f,1f,0xFF35404A.toInt())
+        }
+        // Central walkable stone floor and decorated perimeter.
+        rect(c,17f,27f,286f,161f,0xFF3E4141.toInt())
+        for(row in 0..9)for(col in 0..17){
+            val x=18f+col*16f;val y=28f+row*16f
+            rect(c,x,y,15f,15f,if((row+col)%3==0)0xFF454948.toInt()
+                else 0xFF3B403E.toInt())
+            rect(c,x,y,14f,1f,0xFF4F514B.toInt())
+        }
+        // Warm path links the four functional stations.
+        rect(c,149f,30f,22f,146f,0xFF655949.toInt())
+        rect(c,35f,100f,249f,13f,0xFF665A49.toInt())
+        for(i in 0..8){
+            rect(c,153f,35f+i*16f,12f,2f,0xFF877258.toInt())
+        }
+        // Forge (top left): grows chimney, glowing anvil and tools.
+        rect(c,37f,46f,56f,37f,0xFF252D36.toInt())
+        rect(c,40f,42f,50f,7f,0xFF777B78.toInt())
+        rect(c,44f,36f,14f,12f,0xFF59606A.toInt())
+        if(h.forge>=2)rect(c,48f,23f,8f,18f,0xFF626B70.toInt())
+        rect(c,55f,58f,23f,15f,0xFF8B5441.toInt())
+        rect(c,60f,62f,12f,7f,0xFFF0A058.toInt())
+        rect(c,57f,78f,21f,3f,0xFF9EA9AE.toInt())
+        if(h.forge>=4)rect(c,76f,36f,5f,16f,0xFFDBBD81.toInt())
+        text(c,"FORGE "+h.forge,35f,94f,9f,0xFFEAC48D.toInt())
+        // Medic station (top right), increasingly equipped.
+        rect(c,229f,42f,53f,43f,0xFF586452.toInt())
+        rect(c,225f,39f,61f,8f,0xFF8A9980.toInt())
+        rect(c,237f,55f,15f,22f,0xFFBBB6A2.toInt())
+        rect(c,242f,59f,5f,14f,0xFFBD5056.toInt())
+        rect(c,238f,64f,13f,4f,0xFFBD5056.toInt())
+        if(h.healer>=2){
+            rect(c,260f,53f,14f,15f,0xFF7CC3A9.toInt())
+            rect(c,264f,48f,6f,6f,0xFFB2E5CD.toInt())
+        }
+        if(h.healer>=5)rect(c,258f,72f,19f,5f,0xFFD5E2BD.toInt())
+        text(c,"HEAL "+h.healer,231f,95f,9f,0xFFBDE2B9.toInt())
+        // Scout station (bottom right) with map, lantern and increasing supplies.
+        rect(c,225f,131f,61f,37f,0xFF564A3C.toInt())
+        rect(c,230f,126f,50f,10f,0xFF8B7656.toInt())
+        rect(c,237f,140f,32f,20f,0xFFC7AF7A.toInt())
+        rect(c,242f,144f,20f,2f,0xFF6D684C.toInt())
+        rect(c,247f,148f,2f,10f,0xFF7B7959.toInt())
+        if(h.scouts>=2)rect(c,274f,137f,8f,14f,0xFFDCC477.toInt())
+        if(h.scouts>=4)rect(c,231f,157f,12f,9f,0xFF71895E.toInt())
+        text(c,"SCOUT "+h.scouts,224f,181f,9f,0xFFE0CE94.toInt())
+        // Camp quarters (bottom left).
+        rect(c,34f,136f,69f,32f,0xFF40545D.toInt())
+        rect(c,37f,129f,63f,8f,0xFF9B875E.toInt())
+        rect(c,44f,143f,48f,15f,0xFF697C78.toInt())
+        if(h.camp>=2)rect(c,40f,126f,8f,11f,0xFFBE9B66.toInt())
+        if(h.camp>=5)rect(c,94f,143f,6f,18f,0xFFCDAC67.toInt())
+        text(c,"CAMP "+h.camp,39f,181f,9f,0xFFE3CCA3.toInt())
+        // Central campfire. Stable flame with restrained pixel animation.
+        rect(c,129f,100f,62f,8f,0xFF21262B.toInt())
+        for(i in 0..5){
+            rect(c,135f+i*9f,101f,7f,5f,0xFF847F75.toInt())
+        }
+        rect(c,146f,90f,28f,11f,0xFF78442D.toInt())
+        val flicker=if(live)(sin(frame*0.12)*2).toFloat() else 0f
+        rect(c,150f,77f+flicker,20f,16f,0xFFF2943C.toInt())
+        rect(c,155f,71f-flicker,10f,17f,0xFFFFCB70.toInt())
+        rect(c,158f,80f,5f,11f,0xFFFFE5A0.toInt())
+        light(c,160f,109f,68f,0x445C4228)
+        // Party hero in front of the fire.
+        val breathe=if(live)(sin(frame*0.07)*1.3).toFloat() else 0f
+        rect(c,151f,140f,18f,4f,0xFF242A2C.toInt())
+        rect(c,154f,125f+breathe,12f,14f,0xFF4A6C89.toInt())
+        rect(c,154f,118f+breathe,12f,9f,0xFFD9B992.toInt())
+        rect(c,152f,116f+breathe,16f,4f,0xFF6D5A43.toInt())
+        rect(c,153f,138f+breathe,5f,7f,0xFF273547.toInt())
+        rect(c,162f,138f+breathe,5f,7f,0xFF273547.toInt())
+        // Portal marks the return point, without modifying the active dungeon.
+        rect(c,149f,22f,22f,12f,0xFF344C64.toInt())
+        rect(c,153f,24f,14f,8f,0xFF6096B1.toInt())
+        rect(c,156f,25f,8f,6f,0xFF9DD6D7.toInt())
+        // Minimal bottom overlay, not a second viewport or tab-specific height.
+        rect(c,0f,190f,320f,18f,0xE0131E27.toInt())
+        text(c,"FLOOR 0  /  SANCTUARY",10f,202f,10f,0xFFE9CEA0.toInt())
+        text(c,"SAFE",272f,202f,9f,0xFF9BD5AD.toInt())
+        return b
+    }
+}

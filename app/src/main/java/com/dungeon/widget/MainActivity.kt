@@ -144,7 +144,7 @@ class MainActivity:Activity(){
                     DungeonScene.render(state,frame++,true,1.16f,age,true,
                         dungeonMotion,previousRoomFrame)).apply{isFilterBitmap=false})
                 fullscreenLabel?.text="♥ "+state.hp+"/"+state.maxHp+
-                    "   Уровень "+state.level+"   ·   Этаж "+state.floor+
+                    "   Уровень "+state.level+"   ·   Этаж "+(if(state.inCamp)0 else state.floor)+
                     "\n"+state.log
             }else{
                 // One persistent live dungeon viewport across every tab.
@@ -261,7 +261,7 @@ class MainActivity:Activity(){
     }
     private fun updateNumbers(){
         window.statusBarColor=base;window.navigationBarColor=base;root.setBackgroundColor(base)
-        headline.text="ЭТАЖ "+state.floor+"   ·   "+state.biome
+        headline.text=if(state.inCamp)"ЭТАЖ 0   ·   УБЕЖИЩЕ" else "ЭТАЖ "+state.floor+"   ·   "+state.biome
         val battle=if(state.enemyHp>0){
             "  ·  ⚔ "+state.enemy+" "+state.enemyHp+"/"+state.enemyMaxHp+" HP"
         }else ""
@@ -269,7 +269,7 @@ class MainActivity:Activity(){
         val explored=DungeonExploration.exploredPercent(state,map)
         val summary=if(state.log.startsWith("Разведка:"))
             "Герой осматривает проходы" else state.log
-        narration.text=summary+"\nКОМНАТА "+state.room+"/8  ·  Разведано "+explored+"%"+
+        narration.text=if(state.inCamp)"Безопасный этаж · костёр, кузница, лечебница и разведчики\nПоход сохранён: этаж "+state.floor+", комната "+state.room else summary+"\nКОМНАТА "+state.room+"/8  ·  Разведано "+explored+"%"+
             (if(state.paused)"  ·  ПАУЗА" else "")+battle
         if(page==0){
             expeditionStatsView?.text=expeditionStatsText()
@@ -296,8 +296,13 @@ class MainActivity:Activity(){
     }
     private fun switchPage(idx:Int){
         // Keep the same live scene mounted while switching tabs.
+        if(idx==2 && !state.inCamp){
+            DungeonGame.enterCamp(this)
+            state=DungeonGame.advance(this)
+            dungeonMotion.reset();previousRoomFrame=null
+        }
         if(page!=idx){page=idx;buildTabs();details.scrollTo(0,0)}
-        refreshPage()
+        updateNumbers();refreshPage()
     }
     private fun change(fn:()->Boolean){
         if(!fn())Toast.makeText(this,"Недостаточно ресурсов или действие недоступно",Toast.LENGTH_SHORT).show()
@@ -521,6 +526,13 @@ class MainActivity:Activity(){
             .setNegativeButton("Отмена",null).show()
     }
     private fun camp(){
+        card(body,"⌂ ЭТАЖ 0 · УБЕЖИЩЕ",
+            "Безопасная часть подземелья. Здесь не идут бои. Возвращение продолжит поход с той же комнаты."){
+            action(this,"⚔ ВЕРНУТЬСЯ НА ЭТАЖ "+state.floor,true){
+                change{DungeonGame.leaveCamp(this@MainActivity)}
+                switchPage(0)
+            }
+        }
         // Materials and resource explanations now live only in the camp.
         card(body,"◈ РЕСУРСЫ И МАТЕРИАЛЫ"){
             addLine(this,"◉ Золото: "+state.gold+
@@ -534,12 +546,12 @@ class MainActivity:Activity(){
             addLine(this,"♥ Здоровье "+state.hp+"/"+state.maxHp+
                 "   ◇ Запас на "+state.supplies+" боёв",14f,ivory,true)
             action(this,"ОТДОХНУТЬ · "+DungeonGame.restCost(state)+" ЗОЛОТА",
-                state.gold>=DungeonGame.restCost(state)&&
+                state.inCamp&&state.gold>=DungeonGame.restCost(state)&&
                 (state.hp<state.maxHp||state.effectTicks>0)){
                 change{DungeonGame.restAtCamp(this@MainActivity)}
             }
             action(this,"СОБРАТЬ ПРИПАСЫ · "+DungeonGame.supplyCost(state)+" ЗОЛОТА",
-                state.gold>=DungeonGame.supplyCost(state)&&state.supplies==0){
+                state.inCamp&&state.gold>=DungeonGame.supplyCost(state)&&state.supplies==0){
                 change{DungeonGame.prepareExpedition(this@MainActivity)}
             }
         }
@@ -553,7 +565,7 @@ class MainActivity:Activity(){
         )
         for((key,title,level)in improvements){
             card(body,title,"Уровень "+level+" · Цена "+DungeonGame.upgradeCost(level)+" золота"){
-                action(this,"УЛУЧШИТЬ",state.gold>=80+level*85&&level<12){
+                action(this,"УЛУЧШИТЬ",state.inCamp&&state.gold>=DungeonGame.upgradeCost(level)&&level<12){
                     change{DungeonGame.upgrade(this@MainActivity,key)}
                 }
             }

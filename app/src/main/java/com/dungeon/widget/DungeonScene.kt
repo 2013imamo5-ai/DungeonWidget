@@ -30,6 +30,7 @@ object DungeonScene {
     fun render(h:HeroState,frame:Int=0,live:Boolean=false,zoom:Float=1f,
         transitionAge:Int=1000,cleanHud:Boolean=false,motion:DungeonMotion?=null,
         previousFrame:Bitmap?=null):Bitmap{
+        if(h.inCamp)return CampFloorScene.render(h,frame,live)
         val b=Bitmap.createBitmap(W,H,Bitmap.Config.ARGB_8888)
         val c=Canvas(b)
         val biome=h.biomeId

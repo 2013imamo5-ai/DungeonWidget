@@ -37,10 +37,10 @@ jobs:
       - name: Build permanently signed APK
         run: |
           gradle --no-daemon :app:assembleRelease
-          cp app/build/outputs/apk/release/app-release.apk DungeonWidget-v1.0.17.apk
+          cp app/build/outputs/apk/release/app-release.apk DungeonWidget-v1.0.18.apk
       - name: Publish direct APK
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release view v1.0.17 >/dev/null 2>&1 && gh release delete v1.0.17 --yes || true
-          gh release create v1.0.17 DungeonWidget-v1.0.17.apk --title "Dungeon Widget v1.0.17" --notes "Camp rest and expedition supplies, improved resource balance, reworked camp cards. Persistent viewport, equipment and saves preserved."
+          gh release view v1.0.18 >/dev/null 2>&1 && gh release delete v1.0.18 --yes || true
+          gh release create v1.0.18 DungeonWidget-v1.0.18.apk --title "Dungeon Widget v1.0.18" --notes "New playable floor 0 camp scene with building visuals, safe return to same dungeon room and retained progress."
