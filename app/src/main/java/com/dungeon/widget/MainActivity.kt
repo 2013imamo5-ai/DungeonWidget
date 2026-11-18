@@ -542,6 +542,39 @@ class MainActivity:Activity(){
         // Materials and resource explanations now live only in the camp.
         card(body,"☼ ЖИВОЙ ЛАГЕРЬ",
             "Герой осматривает мастерские. Кузнец работает у наковальни, лекарь и разведчики заняты делом. При возвращении герой направляется к порталу.")
+        card(body,"◉ ЖИТЕЛИ И ПОРУЧЕНИЯ",
+            "Новые услуги лагеря. Ежедневные награды выдаются только один раз, а для задания нужно вернуться из похода."){
+            val active=DungeonGame.contractAvailable(state)
+            addLine(this,if(!active)"Разведчик: доступно новое поручение"
+                else if(state.contractClaimed)"Разведчик: поручение выполнено сегодня"
+                else "Победите 8 врагов · прогресс "+DungeonGame.contractProgress(state)+"/8",
+                13f,ivory,true)
+            if(!active){
+                action(this,"ВЗЯТЬ ПОРУЧЕНИЕ · 8 ВРАГОВ",state.inCamp){
+                    change{DungeonGame.acceptCampContract(this@MainActivity)}
+                }
+            }else if(!state.contractClaimed){
+                action(this,"ЗАБРАТЬ НАГРАДУ · ЗОЛОТО И МАТЕРИАЛЫ",
+                    state.inCamp&&DungeonGame.contractProgress(state)>=8){
+                    change{DungeonGame.claimCampContract(this@MainActivity)}
+                }
+            }
+            gap(this,7)
+            addLine(this,"◉ Разведчики · уровень "+state.scouts,13f,ivory,true)
+            action(this,"СОБРАТЬ НАХОДКИ РАЗВЕДЧИКОВ · РАЗ В ДЕНЬ",
+                state.inCamp&&state.scouts>0&&
+                    state.scoutCacheDay!=java.time.LocalDate.now().toString()){
+                change{DungeonGame.collectScoutCache(this@MainActivity)}
+            }
+            gap(this,7)
+            addLine(this,"✚ Лекарь · уровень "+state.healer,13f,ivory,true)
+            action(this,"БЕСПЛАТНАЯ ПОМОЩЬ · РАЗ В ДЕНЬ",
+                state.inCamp&&state.healer>0&&
+                    state.healerAidDay!=java.time.LocalDate.now().toString()&&
+                    (state.hp<state.maxHp||state.effectTicks>0)){
+                change{DungeonGame.healerAid(this@MainActivity)}
+            }
+        }
         card(body,"◈ РЕСУРСЫ И МАТЕРИАЛЫ"){
             addLine(this,"◉ Золото: "+state.gold+
                 "     ◈ Кристаллы: "+state.gems,15f,ivory,true)

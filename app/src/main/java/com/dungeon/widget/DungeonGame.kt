@@ -46,6 +46,8 @@ data class HeroState(
     var autoEquip:Boolean=false,var autoSalvageRarity:Int=1,
     var theme:Int=0,var opacity:Int=92,var eco:Boolean=false,
     var questDay:String="",var questCount:Int=0,var questClaimed:Boolean=false,
+    var contractDay:String="",var contractKills:Int=0,var contractClaimed:Boolean=false,
+    var scoutCacheDay:String="",var healerAidDay:String="",
     var offlineReport:String="",var lastReportAt:Long=0,
     // One compact, persistent 20x11 fog mask for the active room.
     var exploreRoom:String="",var exploreSeen:String="",var exploreVisited:String="",
@@ -104,7 +106,10 @@ data class HeroState(
         put("enemy",enemy);put("event",event);put("weaponName",weaponName)
         put("armorName",armorName);put("roomKind",roomKind);put("status",status)
         put("autoSalvage",autoSalvage);put("eco",eco);put("questDay",questDay)
-        put("questClaimed",questClaimed);put("offlineReport",offlineReport)
+        put("questClaimed",questClaimed);put("contractDay",contractDay)
+        put("contractKills",contractKills);put("contractClaimed",contractClaimed)
+        put("scoutCacheDay",scoutCacheDay);put("healerAidDay",healerAidDay)
+        put("offlineReport",offlineReport)
         put("lastReportAt",lastReportAt);put("effectType",effectType);put("effectTicks",effectTicks)
         put("attackVisual",attackVisual);put("enemyWarning",enemyWarning)
         put("lastAbility",lastAbility);put("elite",elite)
@@ -177,6 +182,11 @@ data class HeroState(
             h.opacity=o.optInt("opacity",92).coerceIn(20,100);h.eco=o.optBoolean("eco")
             h.questDay=o.optString("questDay");h.questCount=o.optInt("questCount")
             h.questClaimed=o.optBoolean("questClaimed")
+            h.contractDay=o.optString("contractDay")
+            h.contractKills=o.optInt("contractKills").coerceAtLeast(0)
+            h.contractClaimed=o.optBoolean("contractClaimed")
+            h.scoutCacheDay=o.optString("scoutCacheDay")
+            h.healerAidDay=o.optString("healerAidDay")
             h.offlineReport=o.optString("offlineReport");h.lastReportAt=o.optLong("lastReportAt")
             val arr=o.optJSONArray("gear")
             if(arr!=null)for(i in 0 until arr.length())runCatching{
@@ -370,6 +380,46 @@ object DungeonGame{
         if(!h.inCamp || h.gold<cost || h.supplies>0)false else {
             h.gold-=cost;h.supplies=(3+h.camp/3).coerceAtMost(8)
             h.log="Припасы собраны: ${h.supplies} защищённых боёв"
+            h.event="camp";true
+        }
+    }
+    fun contractProgress(h:HeroState):Int=
+        if(h.contractDay==today())(h.kills-h.contractKills).coerceIn(0,8) else 0
+    fun contractAvailable(h:HeroState):Boolean=h.contractDay==today()
+    fun acceptCampContract(ctx:Context)=mutate(ctx){h->
+        if(!h.inCamp || h.contractDay==today())false else{
+            h.contractDay=today();h.contractKills=h.kills
+            h.contractClaimed=false
+            h.log="Разведчики выдали поручение: победить 8 врагов за сегодня"
+            h.event="camp";true
+        }
+    }
+    fun claimCampContract(ctx:Context)=mutate(ctx){h->
+        if(!h.inCamp || h.contractDay!=today() ||
+            h.contractClaimed || contractProgress(h)<8)false else{
+            h.contractClaimed=true
+            h.gold+=45+h.scouts*5
+            h.shards+=2+h.scouts/3
+            h.log="Поручение выполнено! Получены золото и материалы"
+            h.event="camp";true
+        }
+    }
+    fun collectScoutCache(ctx:Context)=mutate(ctx){h->
+        if(!h.inCamp || h.scouts<1 || h.scoutCacheDay==today())false else{
+            h.scoutCacheDay=today()
+            h.shards+=(1+h.scouts/3).coerceAtMost(5)
+            h.gold+=8+h.scouts*2
+            h.log="Разведчики принесли материалы и немного золота"
+            h.event="camp";true
+        }
+    }
+    fun healerAid(ctx:Context)=mutate(ctx){h->
+        if(!h.inCamp || h.healer<1 || h.healerAidDay==today() ||
+            (h.hp>=h.maxHp && h.effectTicks==0))false else{
+            h.healerAidDay=today()
+            h.hp=min(h.maxHp,h.hp+h.maxHp*(20+h.healer.coerceAtMost(6)*5)/100)
+            h.effectTicks=0;h.effectType=""
+            h.log="Лекарь оказал бесплатную ежедневную помощь"
             h.event="camp";true
         }
     }

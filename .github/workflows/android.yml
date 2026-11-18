@@ -37,10 +37,10 @@ jobs:
       - name: Build permanently signed APK
         run: |
           gradle --no-daemon :app:assembleRelease
-          cp app/build/outputs/apk/release/app-release.apk DungeonWidget-v1.0.19.apk
+          cp app/build/outputs/apk/release/app-release.apk DungeonWidget-v1.0.20.apk
       - name: Publish direct APK
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release view v1.0.19 >/dev/null 2>&1 && gh release delete v1.0.19 --yes || true
-          gh release create v1.0.19 DungeonWidget-v1.0.19.apk --title "Dungeon Widget v1.0.19" --notes "Animated floor zero sanctuary with wandering hero, four workers, forge sparks, embers and animated portal. Preserves saved dungeon room."
+          gh release view v1.0.20 >/dev/null 2>&1 && gh release delete v1.0.20 --yes || true
+          gh release create v1.0.20 DungeonWidget-v1.0.20.apk --title "Dungeon Widget v1.0.20" --notes "Camp residents offer a daily 8-enemy contract, scout cache and healer assistance. Persistent save, visuals and dungeon floor retained."
