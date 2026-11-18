@@ -23,7 +23,7 @@ object DungeonAtmosphere {
             val cx=x*16f+8f
             val cy=y*16f+17f
             val flicker=sin(tick/245.0+x*2.1+y).toFloat()
-            val a=(13+flicker*3).toInt().coerceIn(9,18)
+            val a=(27+flicker*5).toInt().coerceIn(20,35)
             val glow=when(biome){
                 1->Color.argb(a,144,225,151)
                 3->Color.argb(a,112,207,245)
@@ -31,10 +31,10 @@ object DungeonAtmosphere {
             }
             rect(c,cx-26f,cy-15f,52f,44f,glow)
             rect(c,cx-15f,cy-10f,30f,30f,
-                Color.argb(a+5,if(biome==3)126 else 255,
+                Color.argb((a+13).coerceAtMost(65),if(biome==3)126 else 255,
                     if(biome==1)245 else 199,if(biome==3)255 else 106))
             rect(c,cx-6f,cy-11f,12f,13f,
-                Color.argb(a+12,255,234,176))
+                Color.argb((a+24).coerceAtMost(85),255,234,176))
             if(animate && biome!=1){
                 // Tiny flickering embers rise rather than moving the torch base.
                 val up=((tick/140+x*7+y*3)%12).toFloat()

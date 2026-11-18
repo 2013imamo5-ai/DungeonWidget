@@ -151,6 +151,23 @@ object DungeonSetPieces {
                 r(c,px+10f,py+8f,4f,2f,0xFF877E85.toInt())
             }
         }
+        // Boss encounters are marked by a worn crimson floor seal, like
+        // the one visible in the dungeon reference. This is not a hazard.
+        for(e in room.events){
+            if(e.kind!="boss")continue
+            val cx=e.cell.x*16f+8f
+            val cy=17f+e.cell.y*16f+6f
+            for(i in 0..23){
+                val a=i*Math.PI/12.0
+                val dx=sin(a).toFloat()*17f
+                val dy=kotlin.math.cos(a).toFloat()*13f
+                r(c,cx+dx-1f,cy+dy-1f,3f,2f,0xFF814450.toInt())
+            }
+            r(c,cx-5f,cy-3f,10f,7f,0xFF6B3549.toInt())
+            r(c,cx-3f,cy-2f,6f,5f,0xFFBF7569.toInt())
+            r(c,cx-2f,cy-1f,2f,2f,0xFF352332.toInt())
+            r(c,cx+1f,cy-1f,2f,2f,0xFF352332.toInt())
+        }
         // Every room has a distinct, recognizable staircase at its actual exit.
         stairs(c,room.exit,biome,time,animate)
         c.restore()
