@@ -529,11 +529,19 @@ class MainActivity:Activity(){
         card(body,"⌂ ЭТАЖ 0 · УБЕЖИЩЕ",
             "Безопасная часть подземелья. Здесь не идут бои. Возвращение продолжит поход с той же комнаты."){
             action(this,"⚔ ВЕРНУТЬСЯ НА ЭТАЖ "+state.floor,true){
-                change{DungeonGame.leaveCamp(this@MainActivity)}
-                switchPage(0)
+                CampFloorScene.beginExit()
+                handler.postDelayed({
+                    if(!isFinishing && state.inCamp){
+                        change{DungeonGame.leaveCamp(this@MainActivity)}
+                        switchPage(0)
+                    }
+                    CampFloorScene.cancelExit()
+                },1000L)
             }
         }
         // Materials and resource explanations now live only in the camp.
+        card(body,"☼ ЖИВОЙ ЛАГЕРЬ",
+            "Герой осматривает мастерские. Кузнец работает у наковальни, лекарь и разведчики заняты делом. При возвращении герой направляется к порталу.")
         card(body,"◈ РЕСУРСЫ И МАТЕРИАЛЫ"){
             addLine(this,"◉ Золото: "+state.gold+
                 "     ◈ Кристаллы: "+state.gems,15f,ivory,true)
