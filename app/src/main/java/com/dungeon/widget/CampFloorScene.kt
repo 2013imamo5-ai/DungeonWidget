@@ -20,7 +20,7 @@ object CampFloorScene {
         c.drawText(s,x,y,p)
     }
     private fun light(c:Canvas,x:Float,y:Float,w:Float,color:Int){
-        rect(c,x-w/2,y-3,w,6,color)
+        rect(c,x-w/2,y-3f,w,6f,color)
     }
     fun render(h:HeroState,frame:Int,live:Boolean):Bitmap{
         val b=Bitmap.createBitmap(W,H,Bitmap.Config.ARGB_8888)
