@@ -525,21 +525,35 @@ class MainActivity:Activity(){
         card(body,"◈ РЕСУРСЫ И МАТЕРИАЛЫ"){
             addLine(this,"◉ Золото: "+state.gold+
                 "     ◈ Кристаллы: "+state.gems,15f,ivory,true)
-            addLine(this,"⚒ Материалы: "+state.shards,15f,gold,true)
+            addLine(this,"⚒ Материалы: "+state.shards+"     ◇ Припасы: "+state.supplies,15f,gold,true)
             addLine(this,"Материалы — разбор снаряжения и найденные ящики."+
                 "\nКристаллы — боссы, реликвии и ежедневные цели.",12f,muted)
         }
-        card(body,"⌂ ЛАГЕРЬ ГЕРОЯ",
-            "Улучшения сохраняются после гибели героя.")
+        card(body,"🔥 КОСТЁР И ПОДГОТОВКА",
+            "Лагерь помогает пережить опасные этажи. Припасы дают -15% входящего урона и бонус к монетам за победы."){
+            addLine(this,"♥ Здоровье "+state.hp+"/"+state.maxHp+
+                "   ◇ Запас на "+state.supplies+" боёв",14f,ivory,true)
+            action(this,"ОТДОХНУТЬ · "+DungeonGame.restCost(state)+" ЗОЛОТА",
+                state.gold>=DungeonGame.restCost(state)&&
+                (state.hp<state.maxHp||state.effectTicks>0)){
+                change{DungeonGame.restAtCamp(this@MainActivity)}
+            }
+            action(this,"СОБРАТЬ ПРИПАСЫ · "+DungeonGame.supplyCost(state)+" ЗОЛОТА",
+                state.gold>=DungeonGame.supplyCost(state)&&state.supplies==0){
+                change{DungeonGame.prepareExpedition(this@MainActivity)}
+            }
+        }
+        card(body,"⌂ ПОСТРОЙКИ ЛАГЕРЯ",
+            "Постоянные улучшения сохраняются после гибели героя.")
         val improvements=listOf(
-            Triple("camp","⛺ Укрепить лагерь · +6 HP",state.camp),
+            Triple("camp","⛺ Укрепить лагерь · +6 HP, больше припасов",state.camp),
             Triple("forge","⚒ Улучшить кузницу · +2 атаки",state.forge),
-            Triple("healer","✚ Лечебница · +10 HP",state.healer),
-            Triple("scouts","◉ Разведчики · лучше добыча",state.scouts)
+            Triple("healer","✚ Лечебница · +10 HP, сильнее отдых",state.healer),
+            Triple("scouts","◉ Разведчики · добыча и бонус припасов",state.scouts)
         )
         for((key,title,level)in improvements){
-            card(body,title,"Уровень "+level+" · Цена "+(80+level*85)+" золота"){
-                action(this,"УЛУЧШИТЬ",state.gold>=80+level*85&&level<25){
+            card(body,title,"Уровень "+level+" · Цена "+DungeonGame.upgradeCost(level)+" золота"){
+                action(this,"УЛУЧШИТЬ",state.gold>=80+level*85&&level<12){
                     change{DungeonGame.upgrade(this@MainActivity,key)}
                 }
             }
