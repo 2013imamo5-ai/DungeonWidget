@@ -16,8 +16,8 @@ object DungeonScene {
     private const val H=208
     private val p=Paint().apply{isAntiAlias=false;isFilterBitmap=false}
     private fun color(hex:Long)=hex.toInt()
-    private val floors=intArrayOf(0xFF343949.toInt(),0xFF283E36.toInt(),0xFF42302E.toInt(),0xFF2D4051.toInt())
-    private val walls=intArrayOf(0xFF171E2B.toInt(),0xFF172921.toInt(),0xFF2B1D1C.toInt(),0xFF152333.toInt())
+    private val floors=intArrayOf(0xFF463E4B.toInt(),0xFF314638.toInt(),0xFF493735.toInt(),0xFF344957.toInt())
+    private val walls=intArrayOf(0xFF211D2F.toInt(),0xFF192F29.toInt(),0xFF302020.toInt(),0xFF172A3B.toInt())
     private val accents=intArrayOf(0xFFF0AF57.toInt(),0xFF89D49B.toInt(),0xFFF08455.toInt(),0xFF83D8F0.toInt())
     private fun block(c:Canvas,x:Float,y:Float,w:Float,h:Float,col:Int){
         p.color=col;p.style=Paint.Style.FILL;c.drawRect(x,y,x+w,y+h,p)
@@ -67,6 +67,7 @@ object DungeonScene {
         }
         DungeonTerrain.draw(c,layout,biome,floorColor,wallColor)
         DungeonDressing.draw(c,layout,biome,now,live)
+        DungeonSetPieces.draw(c,layout,biome,now,live)
         DungeonAtmosphere.draw(c,layout,biome,now,live)
         // Objects are spawned at individual deterministic positions, rather
         // than having one fixed encounter in every room.
@@ -143,8 +144,12 @@ object DungeonScene {
                     }else Pair(0f,0f)
                     val breathe=if(live)sin(now/330.0+e.id*1.4).toFloat()*1.4f else 0f
                     c.save()
-                    c.scale(if(e.kind=="boss")0.74f else 0.64f,
-                        if(e.kind=="boss")0.74f else 0.64f,ex,ey)
+                    val spriteScale=when(e.kind){
+                        "boss"->0.90f
+                        "elite"->0.79f
+                        else->0.72f
+                    }
+                    c.scale(spriteScale,spriteScale,ex,ey)
                     c.translate(recoil.first,recoil.second+breathe)
                     enemy(c,ex,ey,h,frame,accent,
                         e.kind=="boss",
@@ -269,7 +274,7 @@ object DungeonScene {
         val heroDrawX=px+lunge*directionX/directionLength
         val heroDrawY=py+lunge*directionY/directionLength
         c.save()
-        c.scale(0.63f,0.63f,heroDrawX,heroDrawY)
+        c.scale(0.69f,0.69f,heroDrawX,heroDrawY)
         hero(c,heroDrawX,heroDrawY,walking,frame,h,accent,
             h.event=="camp",if(combatActive)hitAge else 10000,
             if(combatActive)directionX else 0f,
@@ -756,6 +761,78 @@ object DungeonScene {
         val species=name.lowercase()
         // Each biome's common enemies now have distinct silhouettes.
         // Their position and stats still belong to the original game logic.
+        if(boss){
+            // Crowned undead champion: armored silhouette, torn cloak,
+            // glowing eyes and a massive blade. Palette follows the biome.
+            val armor=when(h.biomeId){
+                1->0xFF4F6857.toInt()
+                2->0xFF6A3845.toInt()
+                3->0xFF426078.toInt()
+                else->0xFF444253.toInt()
+            }
+            val metal=bright(armor,42)
+            val eyes=if(h.biomeId==3)0xFFB8EBFF.toInt()
+                else 0xFFFF6667.toInt()
+            block(c,x-23f,y-15f,46f,36f,0xFF67354C.toInt())
+            block(c,x-28f,y+8f,12f,21f,0xFF512E40.toInt())
+            block(c,x+16f,y+8f,12f,21f,0xFF512E40.toInt())
+            block(c,x-17f,y+5f,14f,25f,0xFF272B37.toInt())
+            block(c,x+3f,y+5f,14f,25f,0xFF272B37.toInt())
+            block(c,x-18f,y-17f,36f,33f,armor)
+            block(c,x-11f,y-12f,22f,19f,metal)
+            block(c,x-5f,y-10f,10f,15f,armor)
+            block(c,x-27f,y-20f,14f,21f,metal)
+            block(c,x+13f,y-20f,14f,21f,metal)
+            block(c,x-14f,y-35f,28f,22f,0xFFE0D4B8.toInt())
+            block(c,x-11f,y-27f,22f,7f,0xFF282733.toInt())
+            dot(c,x-8f,y-25f,eyes,5f)
+            dot(c,x+4f,y-25f,eyes,5f)
+            block(c,x-4f,y-16f,8f,6f,0xFF655047.toInt())
+            block(c,x-16f,y-39f,32f,6f,0xFFAD9563.toInt())
+            for(i in 0..4){
+                block(c,x-15f+i*7f,y-46f+(if(i%2==0)0f else 4f),
+                    4f,10f,0xFFE0BC76.toInt())
+            }
+            // Sword is layered metal rather than a single bright rectangle.
+            block(c,x+30f,y-30f,6f,60f,0xFF283341.toInt())
+            block(c,x+31f,y-35f,4f,52f,0xFFD2DADF.toInt())
+            block(c,x+32f,y-30f,1f,42f,0xFFFFFFFF.toInt())
+            block(c,x+24f,y+9f,18f,5f,0xFFCF9F65.toInt())
+            block(c,x+31f,y+15f,4f,15f,0xFF75523D.toInt())
+            return
+        }
+        if("летуч" in species || "нетопыр" in species || "мышь" in species){
+            val flutter=sin(frame/3.0).toFloat()*6f
+            val skin=0xFF654561.toInt()
+            // Folding wing silhouette, visible even at widget resolution.
+            block(c,x-30f,y-20f-flutter,17f,7f,skin)
+            block(c,x-34f,y-14f-flutter,12f,8f,0xFF85577D.toInt())
+            block(c,x-27f,y-8f-flutter,10f,8f,skin)
+            block(c,x+13f,y-20f-flutter,17f,7f,skin)
+            block(c,x+22f,y-14f-flutter,12f,8f,0xFF85577D.toInt())
+            block(c,x+17f,y-8f-flutter,10f,8f,skin)
+            block(c,x-13f,y-22f,26f,24f,0xFF4F3B59.toInt())
+            block(c,x-9f,y-30f,8f,12f,skin)
+            block(c,x+1f,y-30f,8f,12f,skin)
+            dot(c,x-6f,y-12f,0xFFFF7076.toInt(),4f)
+            dot(c,x+4f,y-12f,0xFFFF7076.toInt(),4f)
+            block(c,x-2f,y-5f,5f,4f,0xFFDCC5B4.toInt())
+            return
+        }
+        if("слиз" in species){
+            val swell=sin(frame/4.0).toFloat()*2f
+            block(c,x-21f,y+12f,42f,6f,0x884FC25E.toInt())
+            block(c,x-19f,y-4f+swell,38f,20f,0xFF478C59.toInt())
+            block(c,x-15f,y-13f+swell,30f,23f,0xFF6FD17C.toInt())
+            block(c,x-9f,y-17f+swell,18f,8f,0xFF9DE99C.toInt())
+            block(c,x-11f,y-4f,6f,7f,0xFF2B553E.toInt())
+            block(c,x+5f,y-4f,6f,7f,0xFF2B553E.toInt())
+            dot(c,x-8f,y-3f,0xFFFFFFBE.toInt(),3f)
+            dot(c,x+8f,y-3f,0xFFFFFFBE.toInt(),3f)
+            block(c,x-23f,y+12f,6f,3f,0xFF74B967.toInt())
+            block(c,x+20f,y+14f,4f,3f,0xFF99D97D.toInt())
+            return
+        }
         if(!boss && "скелет" in species){
             val bone=0xFFDCD8BE.toInt()
             block(c,x-11f,y-27f,22f,17f,bone)
@@ -771,6 +848,16 @@ object DungeonScene {
             block(c,x+6f,y+14f,5f,12f,bone)
             block(c,x+15f,y-15f,3f,34f,0xFFA7BAC9.toInt())
             block(c,x+12f,y+10f,9f,3f,0xFFD3B67F.toInt())
+            // Weathered armor, bright shield boss and red under-eye sockets.
+            block(c,x-13f,y-6f,26f,5f,0xFF706479.toInt())
+            block(c,x-10f,y+2f,20f,6f,0xFF61586A.toInt())
+            block(c,x-25f,y-13f,12f,28f,0xFF715566.toInt())
+            block(c,x-23f,y-11f,8f,23f,0xFF8F8792.toInt())
+            block(c,x-22f,y-4f,6f,3f,0xFFCFB47F.toInt())
+            block(c,x-20f,y-11f,2f,18f,0xFFE8CAA0.toInt())
+            dot(c,x-7f,y-16f,0xFFFF7969.toInt(),2f)
+            dot(c,x+5f,y-16f,0xFFFF7969.toInt(),2f)
+            block(c,x+16f,y-19f,3f,6f,0xFFE8F1EA.toInt())
             return
         }
         if(!boss && ("споровик" in species || "грибной" in species)){
