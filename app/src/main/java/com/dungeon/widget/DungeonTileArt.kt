@@ -136,8 +136,8 @@ object DungeonTileArt {
     }
     fun draw(c:Canvas,room:RoomLayout,biome:Int,now:Long,animate:Boolean){
         val type=biome.coerceIn(0,3)
-        val floor=floorBase[type]
-        val wall=wallBase[type]
+        val floorColor=floorBase[type]
+        val wallColor=wallBase[type]
         c.save()
         c.clipRect(0f,17f,320f,193f)
         for(y in 0 until 11)for(x in 0 until 20){
@@ -149,14 +149,14 @@ object DungeonTileArt {
             val left=room.isFloor(x-1,y)
             val right=room.isFloor(x+1,y)
             if(room.isFloor(x,y)){
-                floor(c,px,py,floor,seed,type)
+                floor(c,px,py,floorColor,seed,type)
                 // Dark edge on walkable side of the raised walls.
                 if(!up)r(c,px,py,16f,2f,0xAA141724.toInt())
                 if(!down)r(c,px,py+14f,16f,2f,0x66141724.toInt())
                 if(!left)r(c,px,py,2f,16f,0xAA141724.toInt())
                 if(!right)r(c,px+14f,py,2f,16f,0xAA141724.toInt())
             }else{
-                wall(c,px,py,wall,seed,up,down,left,right,type)
+                wall(c,px,py,wallColor,seed,up,down,left,right,type)
                 // Same deterministic wall torch positions as the light pass.
                 if(down&&(room.seed+x*23+y*29)%19==3){
                     torch(c,px+8f,py+5f,type,
