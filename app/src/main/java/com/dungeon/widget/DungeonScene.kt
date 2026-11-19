@@ -65,7 +65,7 @@ object DungeonScene {
                 }
             }
         }
-        DungeonTerrain.draw(c,layout,biome,floorColor,wallColor)
+        DungeonTileArt.draw(c,layout,biome,now,live)
         DungeonDressing.draw(c,layout,biome,now,live)
         DungeonSetPieces.draw(c,layout,biome,now,live)
         DungeonAtmosphere.draw(c,layout,biome,now,live)
