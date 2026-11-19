@@ -107,9 +107,9 @@ object DungeonScene {
         val standDistance=kotlin.math.sqrt(
             standDirectionX*standDirectionX+
                 standDirectionY*standDirectionY).coerceAtLeast(1f)
-        val separation=if(active?.kind=="boss")37f
-            else if(active?.kind=="elite" || "призрак" in h.enemy.lowercase())34f
-            else 29f
+        val separation=if(active?.kind=="boss")44f
+            else if(active?.kind=="elite" || "призрак" in h.enemy.lowercase())40f
+            else 35f
         val standX=if(enemyCell!=null && standCell!=null)
             (enemyCell.x*16f+8f+
                 standDirectionX/standDistance*separation).coerceIn(16f,304f)
@@ -145,9 +145,9 @@ object DungeonScene {
                     val breathe=if(live)sin(now/330.0+e.id*1.4).toFloat()*1.4f else 0f
                     c.save()
                     val spriteScale=when(e.kind){
-                        "boss"->0.90f
-                        "elite"->0.79f
-                        else->0.72f
+                        "boss"->1.03f
+                        "elite"->0.91f
+                        else->0.83f
                     }
                     c.scale(spriteScale,spriteScale,ex,ey)
                     c.translate(recoil.first,recoil.second+breathe)
@@ -274,7 +274,7 @@ object DungeonScene {
         val heroDrawX=px+lunge*directionX/directionLength
         val heroDrawY=py+lunge*directionY/directionLength
         c.save()
-        c.scale(0.69f,0.69f,heroDrawX,heroDrawY)
+        c.scale(0.83f,0.83f,heroDrawX,heroDrawY)
         hero(c,heroDrawX,heroDrawY,walking,frame,h,accent,
             h.event=="camp",if(combatActive)hitAge else 10000,
             if(combatActive)directionX else 0f,
@@ -463,12 +463,12 @@ object DungeonScene {
                 block(c,x*16f,17f+y*16f,16f,16f,0xFF070D17.toInt())
             }else if(!DungeonExploration.visible(room,at,Tile(x,y))){
                 // Explored cells form a very faint memory, not a live view.
-                block(c,x*16f,17f+y*16f,16f,16f,0xC20A1320.toInt())
+                block(c,x*16f,17f+y*16f,16f,16f,0x790A1420.toInt())
             }else{
                 // Outer edge of active sight is a soft pixelated penumbra.
                 val dx=x-at.x;val dy=y-at.y
                 if(dx*dx+dy*dy>=12)
-                    block(c,x*16f,17f+y*16f,16f,16f,0x36090F19)
+                    block(c,x*16f,17f+y*16f,16f,16f,0x23090F19)
             }
         }
         c.restore()

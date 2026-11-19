@@ -71,7 +71,7 @@ class DungeonWidgetProvider:AppWidgetProvider(){
                 Color.argb(h.opacity*255/100,17,24,34))
             // Widget artwork has its own clean viewport: no duplicated HUD labels.
             // The full dungeon remains visible in expanded widgets, with no center cropping.
-            val zoom=if(large)1f else if(tiny)1.35f else 1.22f
+            val zoom=if(large)1.20f else if(tiny)1.45f else 1.38f
             val sceneBitmap=DungeonScene.render(h,0,false,zoom)
             val widgetBitmap=Bitmap.createBitmap(sceneBitmap,0,17,320,176)
             views.setImageViewBitmap(R.id.widgetScene,widgetBitmap)

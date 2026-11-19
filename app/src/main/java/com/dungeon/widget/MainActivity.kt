@@ -141,7 +141,7 @@ class MainActivity:Activity(){
             if(age>=750)previousRoomFrame=null
             if(fullscreenDialog?.isShowing==true){
                 fullscreenView?.setImageDrawable(BitmapDrawable(resources,
-                    DungeonScene.render(state,frame++,true,1.16f,age,true,
+                    DungeonScene.render(state,frame++,true,1.48f,age,true,
                         dungeonMotion,previousRoomFrame)).apply{isFilterBitmap=false})
                 fullscreenLabel?.text="♥ "+state.hp+"/"+state.maxHp+
                     "   Уровень "+state.level+"   ·   Этаж "+(if(state.inCamp)0 else state.floor)+
@@ -149,7 +149,7 @@ class MainActivity:Activity(){
             }else{
                 // One persistent live dungeon viewport across every tab.
                 scene.setImageDrawable(BitmapDrawable(resources,
-                    DungeonScene.render(state,frame++,true,1.12f,age,true,
+                    DungeonScene.render(state,frame++,true,1.40f,age,true,
                         dungeonMotion,previousRoomFrame)).apply{isFilterBitmap=false})
             }
             if(now-lastWidgetRefresh>=12000L){
