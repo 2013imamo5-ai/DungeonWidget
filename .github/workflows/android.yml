@@ -37,10 +37,10 @@ jobs:
       - name: Build permanently signed APK
         run: |
           gradle --no-daemon :app:assembleRelease
-          cp app/build/outputs/apk/release/app-release.apk DungeonWidget-v1.0.22.apk
+          cp app/build/outputs/apk/release/app-release.apk DungeonWidget-v1.0.23.apk
       - name: Publish direct APK
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release view v1.0.22 >/dev/null 2>&1 && gh release delete v1.0.22 --yes || true
-          gh release create v1.0.22 DungeonWidget-v1.0.22.apk --title "Dungeon Widget v1.0.22" --notes "Visible new crypt-floor pixel art with sculpted flagstones, strong masonry contrast, larger enemies and hero, brighter explored rooms and closer camera. Fog, room generation and saves retained."
+          gh release view v1.0.23 >/dev/null 2>&1 && gh release delete v1.0.23 --yes || true
+          gh release create v1.0.23 DungeonWidget-v1.0.23.apk --title "Dungeon Widget v1.0.23" --notes "New floor-zero camp reconstructed from original generated pixel-art sprites: illuminated portal, central campfire, forge, healer, scout station and quarters. Workers and hero remain animated, upgrades and progress preserved."

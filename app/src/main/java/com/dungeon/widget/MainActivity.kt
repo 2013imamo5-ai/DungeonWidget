@@ -142,7 +142,7 @@ class MainActivity:Activity(){
             if(fullscreenDialog?.isShowing==true){
                 fullscreenView?.setImageDrawable(BitmapDrawable(resources,
                     DungeonScene.render(state,frame++,true,1.48f,age,true,
-                        dungeonMotion,previousRoomFrame)).apply{isFilterBitmap=false})
+                        dungeonMotion,previousRoomFrame,this@MainActivity)).apply{isFilterBitmap=false})
                 fullscreenLabel?.text="♥ "+state.hp+"/"+state.maxHp+
                     "   Уровень "+state.level+"   ·   Этаж "+(if(state.inCamp)0 else state.floor)+
                     "\n"+state.log
