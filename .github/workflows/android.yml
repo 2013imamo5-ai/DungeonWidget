@@ -37,10 +37,10 @@ jobs:
       - name: Build permanently signed APK
         run: |
           gradle --no-daemon :app:assembleRelease
-          cp app/build/outputs/apk/release/app-release.apk DungeonWidget-v1.0.23.apk
+          cp app/build/outputs/apk/release/app-release.apk DungeonWidget-v1.0.24.apk
       - name: Publish direct APK
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release view v1.0.23 >/dev/null 2>&1 && gh release delete v1.0.23 --yes || true
-          gh release create v1.0.23 DungeonWidget-v1.0.23.apk --title "Dungeon Widget v1.0.23" --notes "New floor-zero camp reconstructed from original generated pixel-art sprites: illuminated portal, central campfire, forge, healer, scout station and quarters. Workers and hero remain animated, upgrades and progress preserved."
+          gh release view v1.0.24 >/dev/null 2>&1 && gh release delete v1.0.24 --yes || true
+          gh release create v1.0.24 DungeonWidget-v1.0.24.apk --title "Dungeon Widget v1.0.24" --notes "Animated sprite layers: rotating blue portal vortex, moving campfire and forge flames, drifting embers, potion bubbles and pulsing station lights. Hero movement, camp progress and saves preserved."

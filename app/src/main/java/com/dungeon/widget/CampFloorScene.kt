@@ -96,9 +96,10 @@ object CampFloorScene {
     fun render(h:HeroState,frame:Int,live:Boolean,context:Context?=null):Bitmap{
         val bmp=Bitmap.createBitmap(W,H,Bitmap.Config.ARGB_8888)
         val c=Canvas(bmp)
+        val now=System.currentTimeMillis()
         val image=context?.let{runCatching{sceneBitmap(it)}.getOrNull()}
         if(image!=null){
-            c.drawBitmap(image,null,Rect(0,0,W,H),imagePaint)
+            CampSpriteAnimator.draw(c,image,now)
         }else{
             // Compatibility fallback if the art resource cannot be loaded.
             c.drawColor(0xFF292B3A.toInt())
@@ -113,23 +114,9 @@ object CampFloorScene {
             label(c,"ЛАГЕРЬ",14f,14f,12f,0xFFFFD7A0.toInt())
         }
 
-        // Warm embers rise over the static painted campfire.
-        if(live){
-            for(i in 0..10){
-                val t=(frame*1.5f+i*12f)%52f
-                val xx=159f+sin(frame*.06+i*1.7).toFloat()*13f
-                val yy=123f-t*.60f
-                rect(c,xx,yy,if(i%3==0)2f else 1f,2f,
-                    if(i%3==0)0xFFFFD18B.toInt()
-                    else 0xFFFF975D.toInt())
-            }
-            // The portal's blue shimmer is intentionally restrained so the
-            // original blue vortex sprite remains visible.
-            if(frame%24<9){
-                rect(c,157f,16f,2f,3f,0xFFB3EDFF.toInt())
-                rect(c,170f,29f,2f,2f,0xFF8BE6FD.toInt())
-            }
-        }
+        // Portal rotation, two extracted flame sprites, brazier flicker,
+        // medicine bubbles and scout lights are animated above the artwork.
+        // Drawn by CampSpriteAnimator, independently of movement frames.
 
         // Small visual details unlock with camp upgrades. Gameplay values
         // remain the existing HeroState stats and are not touched here.
@@ -139,21 +126,21 @@ object CampFloorScene {
         if(h.scouts>=2)rect(c,91f,166f,4f,3f,0xFFF1CA7D.toInt())
         if(h.camp>=3)rect(c,274f,155f,3f,4f,0xFFFFD48A.toInt())
 
+        val activityFrame=if(live)((now%360000L)/50L).toInt() else 0
         worker(c,114f,100f,0xFFD3A986.toInt(),0xFF62616C.toInt(),
-            if(live)frame else 0,true)
+            activityFrame,true)
         worker(c,211f,102f,0xFFE1C4A0.toInt(),0xFF51826D.toInt(),
-            if(live)frame+13 else 0)
+            if(live)activityFrame+13 else 0)
         worker(c,124f,168f,0xFFD7BC97.toInt(),0xFF7D6D53.toInt(),
-            if(live)frame+27 else 0)
+            if(live)activityFrame+27 else 0)
         worker(c,211f,172f,0xFFE3C49D.toInt(),0xFF666381.toInt(),
-            if(live)frame+4 else 0)
+            if(live)activityFrame+4 else 0)
 
         val route=arrayOf(
             floatArrayOf(160f,179f),floatArrayOf(125f,178f),
             floatArrayOf(118f,125f),floatArrayOf(160f,180f),
             floatArrayOf(209f,122f),floatArrayOf(211f,181f),
             floatArrayOf(159f,178f))
-        val now=System.currentTimeMillis()
         val outgoing=exitStartedAt>0L && now-exitStartedAt in 0L..1800L
         val hx:Float
         val hy:Float
