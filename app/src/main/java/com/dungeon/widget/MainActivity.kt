@@ -150,7 +150,7 @@ class MainActivity:Activity(){
                 // One persistent live dungeon viewport across every tab.
                 scene.setImageDrawable(BitmapDrawable(resources,
                     DungeonScene.render(state,frame++,true,1.40f,age,true,
-                        dungeonMotion,previousRoomFrame)).apply{isFilterBitmap=false})
+                        dungeonMotion,previousRoomFrame,this@MainActivity)).apply{isFilterBitmap=false})
             }
             if(now-lastWidgetRefresh>=12000L){
                 DungeonWidgetProvider.refreshAll(this@MainActivity)
